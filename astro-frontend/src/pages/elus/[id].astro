@@ -1,0 +1,337 @@
+---
+export const prerender = false
+
+import Layout from '../../layouts/Layout.astro'
+import { fetchItem, fetchItems } from '../../lib/directus'
+
+const { id } = Astro.params
+const elu = await fetchItem('elus', id!)
+if (!elu) return Astro.redirect('/elus')
+
+// Charger les collectivités pour résoudre les noms
+const collectivites = await fetchItems('collectivites', { limit: '200', fields: 'id,nom,type' })
+const collMap: Record<number, any> = {}
+for (const c of collectivites) collMap[c.id] = c
+
+// Présences aux séances
+const presences = await fetchItems('presences', {
+  'filter[elu][_eq]': String(elu.id),
+  limit: '100',
+  fields: 'id,seance,statut,procuration_a',
+})
+
+// Séances pour les présences
+const seances = await fetchItems('seances', { limit: '200', fields: 'id,date,type,collectivite' })
+const seanceMap: Record<number, any> = {}
+for (const s of seances) seanceMap[s.id] = s
+
+// Votes individuels
+const votes = await fetchItems('votes_elus', {
+  'filter[elu][_eq]': String(elu.id),
+  limit: '200',
+  fields: 'id,deliberation,choix',
+})
+
+// Délibérations votées
+const delibIds = [...new Set(votes.map((v: any) => v.deliberation))]
+let deliberations: any[] = []
+if (delibIds.length > 0) {
+  deliberations = await fetchItems('deliberations', {
+    'filter[id][_in]': delibIds.join(','),
+    fields: 'id,numero,titre',
+    limit: '200',
+  })
+}
+const delibMap: Record<number, any> = {}
+for (const d of deliberations) delibMap[d.id] = d
+
+// Stats
+const mandats = Array.isArray(elu.mandats) ? elu.mandats : []
+const totalPresences = presences.length
+const presentsCount = presences.filter((p: any) => p.statut === 'present').length
+const absentsCount = presences.filter((p: any) => p.statut === 'absent').length
+const procCount = presences.filter((p: any) => p.statut === 'procuration').length
+const tauxPresence = totalPresences > 0 ? Math.round((presentsCount / totalPresences) * 100) : null
+
+const votesPour = votes.filter((v: any) => v.choix === 'pour').length
+const votesContre = votes.filter((v: any) => v.choix === 'contre').length
+const votesAbstention = votes.filter((v: any) => v.choix === 'abstention').length
+
+const roleLabel: Record<string, string> = {
+  maire: 'Maire', adjoint: 'Adjoint(e)', conseiller: 'Conseiller(ère) municipal(e)',
+  president: 'Président(e)', vice_president: 'Vice-président(e)',
+  conseiller_communautaire: 'Conseiller(ère) communautaire',
+  conseiller_departemental: 'Conseiller(ère) départemental(e)',
+}
+
+const typeLabel: Record<string, string> = {
+  commune: 'Commune', interco: 'Intercommunalité', canton: 'Canton',
+}
+
+// Calcul de l'âge
+function calcAge(dateStr: string): number | null {
+  if (!dateStr) return null
+  const parts = dateStr.split('/')
+  if (parts.length !== 3) return null
+  const birth = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]))
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const m = today.getMonth() - birth.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
+  return age
+}
+
+const age = calcAge(elu.date_naissance)
+---
+
+<Layout title={`${elu.prenom} ${elu.nom} — Élu(e)`}>
+  <!-- En-tête profil -->
+  <div class="mb-8">
+    <a href="/elus" class="text-sm text-gray-500 hover:text-green-700">← Retour aux élus</a>
+
+    <div class="mt-4 flex items-start gap-6">
+      <div class="flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-800 font-bold text-2xl shrink-0">
+        {elu.prenom?.[0]}{elu.nom?.[0]}
+      </div>
+      <div>
+        <h1 class="text-3xl font-bold">{elu.prenom} {elu.nom}</h1>
+        <div class="mt-1 flex flex-wrap gap-2">
+          {mandats.map((m: any) => {
+            const coll = collMap[m.collectivite]
+            const collShort = coll?.type === 'interco' ? 'CCGT'
+              : coll?.type === 'canton' ? 'Canton'
+              : coll?.nom || m.commune
+            return (
+              <span class={`rounded-full px-3 py-1 text-sm font-medium ${
+                m.role === 'maire' || m.role === 'president' ? 'bg-green-800 text-white' :
+                m.role === 'adjoint' || m.role === 'vice_president' ? 'bg-green-600 text-white' :
+                m.role === 'conseiller_communautaire' ? 'bg-blue-50 text-blue-700' :
+                m.role === 'conseiller_departemental' ? 'bg-purple-50 text-purple-700' :
+                'bg-gray-100 text-gray-700'
+              }`}>
+                {roleLabel[m.role] || m.role}
+                {m.ordreAdjoint ? ` (${m.ordreAdjoint}${m.ordreAdjoint === 1 ? 'er' : 'e'})` : ''}
+                {collShort && <span class="opacity-75"> — {collShort}</span>}
+              </span>
+            )
+          })}
+        </div>
+        <div class="mt-2 text-sm text-gray-500 space-y-0.5">
+          {elu.profession && <p>Profession : {elu.profession}</p>}
+          {age && <p>{age} ans</p>}
+          {elu.date_debut_mandat && <p>En mandat depuis le {elu.date_debut_mandat}</p>}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid gap-8 md:grid-cols-3">
+    <!-- Colonne principale -->
+    <div class="md:col-span-2 space-y-8">
+      <!-- Mandats -->
+      <section>
+        <h2 class="text-xl font-bold mb-4">Mandats</h2>
+        <div class="space-y-3">
+          {mandats.map((m: any) => {
+            const coll = collMap[m.collectivite]
+            return (
+              <div class="rounded-lg border border-gray-200 p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <span class="font-semibold">{roleLabel[m.role] || m.role}</span>
+                    {m.ordreAdjoint ? <span class="text-gray-500"> ({m.ordreAdjoint}{m.ordreAdjoint === 1 ? 'er' : 'e'})</span> : null}
+                  </div>
+                  {coll && (
+                    <span class={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      coll.type === 'commune' ? 'bg-green-50 text-green-700' :
+                      coll.type === 'interco' ? 'bg-blue-50 text-blue-700' :
+                      'bg-purple-50 text-purple-700'
+                    }`}>
+                      {typeLabel[coll.type] || coll.type}
+                    </span>
+                  )}
+                </div>
+                <p class="text-sm text-gray-600 mt-1">{coll?.nom || m.commune}</p>
+                {m.date_debut && (
+                  <p class="text-xs text-gray-400 mt-1">Depuis le {m.date_debut}</p>
+                )}
+                {m.delegations && (
+                  <p class="text-xs text-gray-500 mt-1">Fonction : {m.delegations}</p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      <!-- Mandats sociaux / intérêts économiques -->
+      {Array.isArray(elu.mandats_sociaux) && elu.mandats_sociaux.length > 0 && (
+        <section>
+          <h2 class="text-xl font-bold mb-4">Intérêts économiques déclarés</h2>
+          <div class="space-y-2">
+            {elu.mandats_sociaux.map((m: any) => (
+              <div class={`rounded-lg border p-3 ${m.etat === 'A' ? 'border-gray-200' : 'border-gray-100 opacity-60'}`}>
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium">{m.entreprise}</span>
+                  {m.etat !== 'A' && <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">cessée</span>}
+                </div>
+                <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                  <span>{m.qualite}</span>
+                  {m.commune && <span>{m.commune}</span>}
+                  <span class="font-mono">SIREN {m.siren}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p class="mt-2 text-xs text-gray-400">Source : Registre du Commerce et des Sociétés — données publiques</p>
+        </section>
+      )}
+
+      <!-- Historique des votes -->
+      {votes.length > 0 && (
+        <section>
+          <h2 class="text-xl font-bold mb-4">Votes enregistrés</h2>
+          <div class="space-y-2">
+            {votes.map((v: any) => {
+              const delib = delibMap[v.deliberation]
+              return (
+                <a href={`/deliberations/${v.deliberation}`} class="flex items-center gap-3 rounded-lg border border-gray-100 p-3 hover:bg-gray-50 transition-colors">
+                  <span class={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    v.choix === 'pour' ? 'bg-green-100 text-green-700' :
+                    v.choix === 'contre' ? 'bg-red-100 text-red-700' :
+                    'bg-gray-100 text-gray-600'
+                  }`}>
+                    {v.choix === 'pour' ? 'Pour' : v.choix === 'contre' ? 'Contre' : 'Abstention'}
+                  </span>
+                  <div class="min-w-0">
+                    {delib && <span class="text-xs text-gray-400 mr-2">{delib.numero}</span>}
+                    <span class="text-sm">{delib?.titre || `Délibération #${v.deliberation}`}</span>
+                  </div>
+                </a>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      <!-- Présences -->
+      {presences.length > 0 && (
+        <section>
+          <h2 class="text-xl font-bold mb-4">Présences en séance</h2>
+          <div class="space-y-2">
+            {presences.map((p: any) => {
+              const seance = seanceMap[p.seance]
+              return (
+                <div class="flex items-center gap-3 rounded-lg border border-gray-100 p-3">
+                  <span class={`inline-block h-3 w-3 rounded-full shrink-0 ${
+                    p.statut === 'present' ? 'bg-green-500' :
+                    p.statut === 'procuration' ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}></span>
+                  <div>
+                    <span class="text-sm font-medium capitalize">{p.statut}</span>
+                    {p.procuration_a && <span class="text-sm text-gray-500"> → {p.procuration_a}</span>}
+                    {seance && (
+                      <span class="text-xs text-gray-400 ml-2">
+                        {seance.date} — {seance.type?.replace('_', ' ')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+    </div>
+
+    <!-- Sidebar stats -->
+    <div class="space-y-6">
+      {tauxPresence !== null && (
+        <div class="rounded-lg border border-gray-200 p-4">
+          <h3 class="text-sm font-semibold text-gray-500 uppercase mb-3">Assiduité</h3>
+          <div class="text-3xl font-bold text-green-700">{tauxPresence}%</div>
+          <p class="text-sm text-gray-500 mt-1">de présence</p>
+          <div class="mt-3 flex gap-4 text-sm">
+            <span class="text-green-600">{presentsCount} présent(e)</span>
+            <span class="text-red-600">{absentsCount} absent(e)</span>
+            {procCount > 0 && <span class="text-yellow-600">{procCount} proc.</span>}
+          </div>
+        </div>
+      )}
+
+      {votes.length > 0 && (
+        <div class="rounded-lg border border-gray-200 p-4">
+          <h3 class="text-sm font-semibold text-gray-500 uppercase mb-3">Votes</h3>
+          <div class="text-3xl font-bold">{votes.length}</div>
+          <p class="text-sm text-gray-500 mt-1">votes enregistrés</p>
+          <div class="mt-3 space-y-2">
+            <div class="flex items-center gap-2">
+              <div class="h-2 flex-1 rounded-full bg-gray-100 overflow-hidden">
+                <div class="h-2 rounded-full bg-green-500" style={`width: ${(votesPour / votes.length) * 100}%`}></div>
+              </div>
+              <span class="text-xs text-gray-500 w-16">Pour {votesPour}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="h-2 flex-1 rounded-full bg-gray-100 overflow-hidden">
+                <div class="h-2 rounded-full bg-red-500" style={`width: ${(votesContre / votes.length) * 100}%`}></div>
+              </div>
+              <span class="text-xs text-gray-500 w-16">Contre {votesContre}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="h-2 flex-1 rounded-full bg-gray-100 overflow-hidden">
+                <div class="h-2 rounded-full bg-gray-400" style={`width: ${(votesAbstention / votes.length) * 100}%`}></div>
+              </div>
+              <span class="text-xs text-gray-500 w-16">Abst. {votesAbstention}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div class="rounded-lg border border-gray-200 p-4">
+        <h3 class="text-sm font-semibold text-gray-500 uppercase mb-3">Informations</h3>
+        <dl class="space-y-2 text-sm">
+          {elu.profession && (
+            <>
+              <dt class="text-gray-400">Profession</dt>
+              <dd class="font-medium">{elu.profession}</dd>
+            </>
+          )}
+          {elu.sexe && (
+            <>
+              <dt class="text-gray-400">Genre</dt>
+              <dd class="font-medium">{elu.sexe === 'F' ? 'Femme' : 'Homme'}</dd>
+            </>
+          )}
+          {age && (
+            <>
+              <dt class="text-gray-400">Âge</dt>
+              <dd class="font-medium">{age} ans</dd>
+            </>
+          )}
+          {elu.date_debut_mandat && (
+            <>
+              <dt class="text-gray-400">Début de mandat</dt>
+              <dd class="font-medium">{elu.date_debut_mandat}</dd>
+            </>
+          )}
+          {elu.liste_electorale && (
+            <>
+              <dt class="text-gray-400">Liste électorale</dt>
+              <dd class="font-medium">{elu.liste_electorale}</dd>
+            </>
+          )}
+        </dl>
+      </div>
+
+      {elu.hatvp_url && (
+        <a href={elu.hatvp_url} target="_blank" rel="noopener" class="block rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 hover:bg-blue-100 transition-colors">
+          📋 Déclaration d'intérêts HATVP
+        </a>
+      )}
+    </div>
+  </div>
+
+  <p class="mt-8 text-xs text-gray-400">
+    Source : Répertoire National des Élus (data.gouv.fr) — Données publiques
+  </p>
+</Layout>

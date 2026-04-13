@@ -1,0 +1,108 @@
+---
+import Layout from '../layouts/Layout.astro'
+import { fetchItems, getSeanceIds } from '../lib/directus'
+
+const collectivite = Astro.url.searchParams.get('collectivite') || ''
+
+const delibParams: Record<string, string> = {
+  'filter[statut][_eq]': 'publie',
+  sort: '-id',
+  limit: '5',
+  'fields': 'id,numero,titre,resume_ia,vote_pour,vote_contre,vote_abstention,budget_montant',
+}
+if (collectivite) {
+  const seanceIds = await getSeanceIds(collectivite)
+  if (seanceIds.length > 0) {
+    delibParams['filter[seance][_in]'] = seanceIds.join(',')
+  } else {
+    delibParams['filter[seance][_eq]'] = '-1' // aucun résultat
+  }
+}
+const deliberations = await fetchItems('deliberations', delibParams)
+const signalements = await fetchItems('signalements', { sort: '-id', limit: '4' })
+const petitions = await fetchItems('petitions', { 'filter[statut][_eq]': 'ouverte', sort: '-id', limit: '3' })
+---
+
+<Layout title="Plateforme Citoyenne Lisloise — Accueil">
+  <div class="mb-12">
+    <h1 class="text-4xl font-bold text-green-800 mb-2">Plateforme Citoyenne</h1>
+    <p class="text-lg text-gray-600">Transparence et participation démocratique — L'Isle-Jourdain & Gascogne Toulousaine</p>
+  </div>
+
+  <div class="grid gap-8 md:grid-cols-3">
+    <!-- Dernières délibérations -->
+    <div class="md:col-span-2">
+      <h2 class="text-2xl font-bold mb-4">Dernières délibérations</h2>
+      <div class="space-y-4">
+        {deliberations.map((d: any) => (
+          <a href={`/deliberations/${d.id}`} class="block rounded-lg border border-gray-200 p-4 hover:border-green-300 hover:bg-green-50 transition-colors">
+            <div class="flex items-start justify-between">
+              <div>
+                <span class="text-xs font-mono text-gray-400">{d.numero}</span>
+                <h3 class="font-semibold text-green-800 mt-0.5">{d.titre}</h3>
+                <p class="text-sm text-gray-600 mt-1 line-clamp-2">{d.resume_ia}</p>
+              </div>
+              {d.budget_montant && (
+                <span class="ml-4 whitespace-nowrap rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-800">
+                  {d.budget_montant.toLocaleString('fr-FR')} €
+                </span>
+              )}
+            </div>
+            <div class="mt-2 flex gap-3 text-xs text-gray-500">
+              <span class="text-green-600">Pour: {d.vote_pour}</span>
+              <span class="text-red-600">Contre: {d.vote_contre}</span>
+              <span class="text-gray-400">Abstention: {d.vote_abstention}</span>
+            </div>
+          </a>
+        ))}
+      </div>
+      <a href="/deliberations" class="mt-4 inline-block text-sm font-medium text-green-700 hover:underline">
+        Voir toutes les délibérations →
+      </a>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="space-y-8">
+      <!-- Signalements -->
+      <div>
+        <h2 class="text-lg font-bold mb-3">Signalements récents</h2>
+        <div class="space-y-3">
+          {signalements.map((s: any) => (
+            <div class="rounded-lg border border-gray-100 p-3">
+              <div class="flex items-center gap-2">
+                <span class={`inline-block h-2 w-2 rounded-full ${
+                  s.statut === 'resolu' ? 'bg-green-500' :
+                  s.statut === 'en_cours' ? 'bg-yellow-500' : 'bg-red-500'
+                }`}></span>
+                <span class="text-xs font-medium text-gray-500 capitalize">{s.type}</span>
+              </div>
+              <p class="text-sm font-medium mt-1">{s.titre}</p>
+              {s.adresse && <p class="text-xs text-gray-400 mt-0.5">{s.adresse}</p>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <!-- Pétitions -->
+      <div>
+        <h2 class="text-lg font-bold mb-3">Pétitions en cours</h2>
+        <div class="space-y-3">
+          {petitions.map((p: any) => (
+            <div class="rounded-lg border border-gray-100 p-3">
+              <p class="text-sm font-medium">{p.titre}</p>
+              <div class="mt-2">
+                <div class="h-2 w-full rounded-full bg-gray-100">
+                  <div
+                    class="h-2 rounded-full bg-blue-600"
+                    style={`width: ${Math.min(100, (p.nombre_signatures / p.seuil) * 100)}%`}
+                  ></div>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">{p.nombre_signatures} / {p.seuil} signatures</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>

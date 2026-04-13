@@ -1,0 +1,38 @@
+---
+import Layout from '../layouts/Layout.astro'
+import { fetchItems } from '../lib/directus'
+
+const signalements = await fetchItems('signalements', { sort: '-id', limit: '50' })
+
+const statusColor: Record<string, string> = {
+  signale: 'bg-red-100 text-red-700', transmis: 'bg-orange-100 text-orange-700',
+  en_cours: 'bg-yellow-100 text-yellow-700', resolu: 'bg-green-100 text-green-700',
+  rejete: 'bg-gray-100 text-gray-700',
+}
+const statusLabel: Record<string, string> = {
+  signale: 'Signalé', transmis: 'Transmis', en_cours: 'En cours', resolu: 'Résolu', rejete: 'Rejeté',
+}
+---
+
+<Layout title="Signalements — Plateforme Citoyenne">
+  <h1 class="text-3xl font-bold mb-6">Signalements</h1>
+  <div class="grid gap-4 sm:grid-cols-2">
+    {signalements.map((s: any) => (
+      <div class="rounded-lg border border-gray-200 p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-medium text-gray-500 capitalize">{s.type}</span>
+          <span class={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor[s.statut] || 'bg-gray-100'}`}>
+            {statusLabel[s.statut] || s.statut}
+          </span>
+        </div>
+        <h3 class="font-semibold">{s.titre}</h3>
+        {s.adresse && <p class="text-sm text-gray-500 mt-1">{s.adresse}</p>}
+        {s.reponse && (
+          <div class="mt-2 rounded bg-green-50 p-2 text-sm text-green-800">
+            <span class="font-medium">Réponse :</span> {s.reponse}
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+</Layout>

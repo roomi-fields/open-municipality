@@ -1,0 +1,70 @@
+---
+import Layout from '../layouts/Layout.astro'
+---
+
+<Layout title="Connexion — Plateforme Citoyenne">
+  <div class="mx-auto max-w-md">
+    <h1 class="text-3xl font-bold mb-2">Participer</h1>
+    <p class="text-gray-500 mb-8">
+      Entrez votre email pour voter, commenter et signer des petitions.
+    </p>
+    <form id="login-form" class="space-y-4">
+      <div>
+        <label for="email" class="block text-sm font-medium mb-1">Email</label>
+        <input id="email" type="email" required
+          class="w-full rounded-lg border border-gray-300 px-4 py-3 text-lg focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+          placeholder="votre@email.fr" />
+      </div>
+      <div>
+        <label for="password" class="block text-sm font-medium mb-1">Mot de passe</label>
+        <input id="password" type="password" required
+          class="w-full rounded-lg border border-gray-300 px-4 py-3 text-lg focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+          placeholder="••••••••" />
+      </div>
+      <div id="error" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2"></div>
+      <button type="submit"
+        class="w-full rounded-lg bg-green-800 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-50">
+        Se connecter
+      </button>
+      <p class="text-xs text-gray-400 text-center">
+        Pas encore de compte ? Contactez l'administration pour en creer un.
+      </p>
+    </form>
+  </div>
+</Layout>
+
+<script>
+  const DIRECTUS_URL = 'http://localhost:8055'
+  const form = document.getElementById('login-form') as HTMLFormElement
+  const errorDiv = document.getElementById('error') as HTMLDivElement
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    errorDiv.classList.add('hidden')
+
+    const email = (document.getElementById('email') as HTMLInputElement).value
+    const password = (document.getElementById('password') as HTMLInputElement).value
+
+    try {
+      const resp = await fetch(`${DIRECTUS_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await resp.json()
+
+      if (!resp.ok) {
+        errorDiv.textContent = data.errors?.[0]?.message || 'Identifiants incorrects'
+        errorDiv.classList.remove('hidden')
+        return
+      }
+
+      localStorage.setItem('directus_token', data.data.access_token)
+      localStorage.setItem('directus_refresh', data.data.refresh_token)
+      window.location.href = '/'
+    } catch {
+      errorDiv.textContent = 'Erreur de connexion'
+      errorDiv.classList.remove('hidden')
+    }
+  })
+</script>

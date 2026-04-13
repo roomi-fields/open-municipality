@@ -1,0 +1,63 @@
+---
+import Layout from '../layouts/Layout.astro'
+import { fetchItems } from '../lib/directus'
+
+const engagements = await fetchItems('engagements', { sort: 'liste_electorale', limit: '100', 'fields': '*,theme.*' })
+
+// Grouper par liste électorale
+const grouped: Record<string, any[]> = {}
+for (const e of engagements) {
+  const liste = e.liste_electorale || 'Autre'
+  if (!grouped[liste]) grouped[liste] = []
+  grouped[liste].push(e)
+}
+
+const statusConfig: Record<string, { color: string; label: string }> = {
+  realise: { color: 'bg-green-100 text-green-700', label: 'Réalisé' },
+  en_cours: { color: 'bg-yellow-100 text-yellow-700', label: 'En cours' },
+  pas_commence: { color: 'bg-gray-100 text-gray-600', label: 'Pas commencé' },
+  abandonne: { color: 'bg-red-100 text-red-700', label: 'Abandonné' },
+}
+---
+
+<Layout title="Engagements — Plateforme Citoyenne">
+  <h1 class="text-3xl font-bold mb-6">Engagements de campagne</h1>
+
+  {Object.entries(grouped).map(([liste, items]) => {
+    const stats = {
+      realise: items.filter((e: any) => e.statut === 'realise').length,
+      en_cours: items.filter((e: any) => e.statut === 'en_cours').length,
+      pas_commence: items.filter((e: any) => e.statut === 'pas_commence').length,
+      abandonne: items.filter((e: any) => e.statut === 'abandonne').length,
+    }
+    return (
+      <div class="mb-8">
+        <h2 class="text-xl font-bold mb-3">{liste}</h2>
+        <div class="flex gap-4 mb-4 text-sm">
+          <span class="text-green-600 font-medium">{stats.realise} réalisé(s)</span>
+          <span class="text-yellow-600">{stats.en_cours} en cours</span>
+          <span class="text-gray-500">{stats.pas_commence} pas commencé(s)</span>
+          {stats.abandonne > 0 && <span class="text-red-600">{stats.abandonne} abandonné(s)</span>}
+        </div>
+        <div class="space-y-3">
+          {items.map((e: any) => {
+            const sc = statusConfig[e.statut] || statusConfig.pas_commence
+            return (
+              <div class="flex items-start gap-3 rounded-lg border border-gray-100 p-3">
+                <span class={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${sc.color}`}>
+                  {sc.label}
+                </span>
+                <div>
+                  <p class="text-sm">{e.description}</p>
+                  {e.theme && (
+                    <span class="text-xs text-gray-400">{e.theme.icone} {e.theme.nom}</span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  })}
+</Layout>

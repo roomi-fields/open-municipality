@@ -1,0 +1,49 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# Astro
+astro-frontend/.astro/
+astro-frontend/dist/
+astro-frontend/.vercel/
+
+# Directus runtime
+uploads/
+directus-data/
+postgres-data/
+
+# Données scrapées (volumineuses, regénérables)
+data/pdfs/
+data/pvs/
+data/ordre-jour/
+data/rne/
+data/interco/
+data/hatvp.csv
+data/scraper-state.json
+data/seances-state.json
+data/notifications.log
+data/pv-*.json
+
+# Scripts temporaires (préfixés _)
+scripts/_*.ts
+scripts/_*.js
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+logs/

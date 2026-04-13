@@ -1,0 +1,136 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: open_municipality
+      POSTGRES_USER: om_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U om_user -d open_municipality"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  directus:
+    image: directus/directus:11
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8055:8055"
+    environment:
+      DB_CLIENT: pg
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: open_municipality
+      DB_USER: om_user
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+
+      SECRET: ${DIRECTUS_SECRET:-change-me-in-production-abc123def456}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@plateforme-citoyenne.fr}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+
+      PUBLIC_URL: ${DIRECTUS_URL:-http://localhost:8055}
+      CORS_ENABLED: "true"
+      CORS_ORIGIN: "*"
+
+      USERS_REGISTER_ENABLED: "true"
+    volumes:
+      - directus_uploads:/directus/uploads
+      - directus_extensions:/directus/extensions
+
+  # Frontend Astro — SSR Node.js
+  frontend:
+    build: ./astro-frontend
+    restart: unless-stopped
+    depends_on:
+      - directus
+    ports:
+      - "3333:3333"
+    environment:
+      DIRECTUS_URL: http://directus:8055
+
+  # Scraper + Pipeline — toutes les 12h
+  scraper:
+    build: ./scripts
+    restart: unless-stopped
+    depends_on:
+      - directus
+    environment:
+      DIRECTUS_URL: http://directus:8055
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@plateforme-citoyenne.fr}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - scraper_data:/app/data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          echo "--- Scrape $$(date) ---"
+          node --import tsx scraper.ts 2>&1 || true
+          if [ -n "$$ANTHROPIC_API_KEY" ]; then
+            echo "--- Pipeline $$(date) ---"
+            node --import tsx pipeline.ts 2>&1 || true
+          fi
+          echo "--- Prochain cycle dans 12h ---"
+          sleep 43200
+        done
+
+  # Mise à jour RNE — tous les 30 jours
+  rne-updater:
+    build: ./scripts
+    restart: unless-stopped
+    depends_on:
+      - directus
+    environment:
+      DIRECTUS_URL: http://directus:8055
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@plateforme-citoyenne.fr}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+    volumes:
+      - scraper_data:/app/data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          echo "--- RNE update $$(date) ---"
+          node --import tsx import-rne.ts --download 2>&1 || true
+          echo "--- Prochain update dans 30 jours ---"
+          sleep 2592000
+        done
+
+  # Notifier — check quotidien J-7
+  notifier:
+    build: ./scripts
+    restart: unless-stopped
+    depends_on:
+      - directus
+    environment:
+      DIRECTUS_URL: http://directus:8055
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@plateforme-citoyenne.fr}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SITE_URL: ${SITE_URL:-http://localhost:3333}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          if [ -n "$$RESEND_API_KEY" ]; then
+            echo "--- Notification check $$(date) ---"
+            node --import tsx notify-seances.ts 2>&1 || true
+          fi
+          echo "--- Prochain check dans 24h ---"
+          sleep 86400
+        done
+
+volumes:
+  pg_data:
+  directus_uploads:
+  directus_extensions:
+  scraper_data:

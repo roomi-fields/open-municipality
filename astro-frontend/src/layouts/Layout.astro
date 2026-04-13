@@ -1,0 +1,49 @@
+---
+import HeaderMenu from '../components/HeaderMenu.tsx'
+import CollectiviteSelector from '../components/CollectiviteSelector.tsx'
+
+interface Props {
+  title?: string
+}
+const { title = 'Plateforme Citoyenne Lisloise' } = Astro.props
+---
+
+<html lang="fr">
+  <head>
+    <style is:global>@import "tailwindcss";</style>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Suivez les décisions du conseil municipal, votez, commentez, proposez." />
+    <link rel="icon" href="/favicon.ico" />
+    <title>{title}</title>
+  </head>
+  <body class="min-h-screen bg-white text-gray-900 antialiased">
+    <header class="border-b border-gray-200 bg-white">
+      <nav class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+        <a href="/" class="text-xl font-bold text-green-800">
+          Plateforme Citoyenne Lisloise
+        </a>
+        <div class="flex items-center gap-6 text-sm font-medium">
+          <a href="/seances" class="hover:text-green-700">Prochains conseils</a>
+          <a href="/deliberations" class="hover:text-green-700">Délibérations</a>
+          <a href="/elus" class="hover:text-green-700">Élus</a>
+          <a href="/signalements" class="hover:text-green-700">Signalements</a>
+          <a href="/petitions" class="hover:text-green-700">Pétitions</a>
+          <a href="/engagements" class="hover:text-green-700">Engagements</a>
+          <a href="/newsletter" class="hover:text-green-700">Newsletter</a>
+          <HeaderMenu client:load />
+        </div>
+      </nav>
+    </header>
+    <CollectiviteSelector client:load />
+    <main class="mx-auto max-w-6xl px-4 py-8">
+      <slot />
+    </main>
+    <footer class="border-t border-gray-200 py-8 text-center text-sm text-gray-500">
+      <p>Plateforme Citoyenne Lisloise — Outil open source de transparence municipale</p>
+      <p class="mt-1">Les résumés sont une vulgarisation citoyenne. Le texte officiel fait foi.</p>
+      <p class="mt-1">Données publiques · Aucun tracking</p>
+    </footer>
+  </body>
+</html>
+

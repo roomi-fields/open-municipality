@@ -1,0 +1,127 @@
+---
+export const prerender = false
+
+import Layout from '../../layouts/Layout.astro'
+import VoteCitoyen from '../../components/VoteCitoyen.tsx'
+import { fetchItem, fetchItems } from '../../lib/directus'
+
+const { id } = Astro.params
+const d = await fetchItem('deliberations', id!, { 'fields': '*,seance.*,theme.*' })
+if (!d) return Astro.redirect('/deliberations')
+
+const commentaires = await fetchItems('commentaires', {
+  'filter[deliberation][_eq]': String(id),
+  'filter[modere][_eq]': 'false',
+  sort: '-id',
+  limit: '50',
+})
+---
+
+<Layout title={`${d.titre} — Délibérations`}>
+  <div class="mb-4">
+    <a href="/deliberations" class="text-sm text-green-700 hover:underline">← Retour aux délibérations</a>
+  </div>
+
+  <div class="flex items-center gap-3 mb-2">
+    <span class="text-sm font-mono text-gray-400">{d.numero}</span>
+    {d.theme && (
+      <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+        {d.theme.icone} {d.theme.nom}
+      </span>
+    )}
+    {d.statut === 'publie' && (
+      <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">Publié</span>
+    )}
+  </div>
+
+  <h1 class="text-2xl font-bold text-green-800 mb-4">{d.titre}</h1>
+
+  {d.budget_montant && d.budget_montant > 10 && (
+    <div class="mb-4 rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3">
+      <span class="text-sm text-yellow-800">Montant : <strong>{d.budget_montant.toLocaleString('fr-FR')} €</strong></span>
+    </div>
+  )}
+
+  <!-- Vote officiel -->
+  <div class="mb-6 rounded-lg border border-gray-200 p-4">
+    <h3 class="text-sm font-semibold text-gray-500 mb-2">Vote officiel</h3>
+    <div class="flex gap-6">
+      <div class="text-center">
+        <div class="text-2xl font-bold text-green-600">{d.vote_pour}</div>
+        <div class="text-xs text-gray-500">Pour</div>
+      </div>
+      <div class="text-center">
+        <div class="text-2xl font-bold text-red-600">{d.vote_contre}</div>
+        <div class="text-xs text-gray-500">Contre</div>
+      </div>
+      <div class="text-center">
+        <div class="text-2xl font-bold text-gray-400">{d.vote_abstention}</div>
+        <div class="text-xs text-gray-500">Abstention</div>
+      </div>
+    </div>
+    {(d.vote_pour + d.vote_contre + d.vote_abstention) > 0 && (
+      <div class="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-gray-100">
+        <div class="bg-green-500" style={`width: ${(d.vote_pour / (d.vote_pour + d.vote_contre + d.vote_abstention)) * 100}%`}></div>
+        <div class="bg-red-500" style={`width: ${(d.vote_contre / (d.vote_pour + d.vote_contre + d.vote_abstention)) * 100}%`}></div>
+        <div class="bg-gray-300" style={`width: ${(d.vote_abstention / (d.vote_pour + d.vote_contre + d.vote_abstention)) * 100}%`}></div>
+      </div>
+    )}
+  </div>
+
+  <!-- Vote citoyen (island React) -->
+  <VoteCitoyen client:visible deliberationId={d.id} />
+
+  <!-- Résumé IA -->
+  {d.resume_ia && (
+    <div class="mb-6">
+      <h2 class="text-lg font-bold mb-2">Résumé</h2>
+      <div class="rounded-lg bg-blue-50 border border-blue-200 p-4 text-sm text-blue-900 leading-relaxed">
+        {d.resume_ia}
+      </div>
+    </div>
+  )}
+
+  <!-- Retranscription -->
+  {d.retranscription && (
+    <details class="mb-6">
+      <summary class="cursor-pointer text-lg font-bold hover:text-green-700">Débats et interventions</summary>
+      <div class="mt-2 rounded-lg bg-gray-50 p-4 text-sm text-gray-700 whitespace-pre-line">
+        {d.retranscription}
+      </div>
+    </details>
+  )}
+
+  <!-- Séance -->
+  {d.seance && (
+    <div class="mb-6 text-sm text-gray-500">
+      Séance du {new Date(d.seance.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+      {d.seance.lieu && ` — ${d.seance.lieu}`}
+    </div>
+  )}
+
+  <!-- Commentaires -->
+  <div class="mt-8">
+    <h2 class="text-lg font-bold mb-4">Commentaires ({commentaires.length})</h2>
+    {commentaires.length === 0 ? (
+      <p class="text-sm text-gray-500">Aucun commentaire pour le moment.</p>
+    ) : (
+      <div class="space-y-3">
+        {commentaires.map((c: any) => (
+          <div class="rounded-lg border border-gray-100 p-3">
+            <span class={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+              c.type === 'argument_pour' ? 'bg-green-100 text-green-700' :
+              c.type === 'argument_contre' ? 'bg-red-100 text-red-700' :
+              c.type === 'question' ? 'bg-blue-100 text-blue-700' :
+              'bg-purple-100 text-purple-700'
+            }`}>
+              {c.type === 'argument_pour' ? 'Pour' :
+               c.type === 'argument_contre' ? 'Contre' :
+               c.type === 'question' ? 'Question' : 'Proposition'}
+            </span>
+            <p class="text-sm mt-1">{c.contenu}</p>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+</Layout>

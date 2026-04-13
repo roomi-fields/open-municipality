@@ -1,0 +1,229 @@
+---
+import Layout from '../../layouts/Layout.astro'
+import { fetchItems } from '../../lib/directus'
+
+const collectivite = Astro.url.searchParams.get('collectivite') || ''
+let elus = await fetchItems('elus', { sort: 'nom', limit: '200', fields: 'id,nom,prenom,sexe,profession,mandats,liste_electorale,date_debut_mandat,delegations' })
+
+// Charger la collectivité courante (pour connaître son type)
+const collectivitesAll = await fetchItems('collectivites', { limit: '50', fields: 'id,nom,type' })
+const currentColl = collectivite ? collectivitesAll.find((c: any) => String(c.id) === collectivite) : null
+const isInterOuCanton = currentColl?.type === 'interco' || currentColl?.type === 'canton'
+
+// Filtrer par collectivité (mandats est un champ JSON)
+if (collectivite) {
+  elus = elus.filter((e: any) => {
+    const mandats = Array.isArray(e.mandats) ? e.mandats : []
+    return mandats.some((m: any) => String(m.collectivite) === collectivite)
+  })
+}
+
+// Déterminer la liste majoritaire (celle du maire/président)
+const allListes = elus.map((e: any) => e.liste_electorale).filter(Boolean)
+function getMajoriteListe(): string {
+  // La liste du maire ou président est la majorité
+  for (const e of elus) {
+    const mandats = Array.isArray(e.mandats) ? e.mandats : []
+    const hasLeadRole = mandats.some((m: any) => m.role === 'maire' || m.role === 'president')
+    if (hasLeadRole && e.liste_electorale) return e.liste_electorale
+  }
+  return ''
+}
+const listeMajoritaire = getMajoriteListe()
+
+function isOpposition(e: any): boolean {
+  if (!listeMajoritaire || !e.liste_electorale) return false
+  return e.liste_electorale !== listeMajoritaire
+}
+
+// Déterminer le rôle pertinent pour chaque élu
+function getRole(e: any): string {
+  const mandats = Array.isArray(e.mandats) ? e.mandats : []
+  if (collectivite) {
+    const m = mandats.find((m: any) => String(m.collectivite) === collectivite)
+    return m?.role || mandats[0]?.role || 'conseiller'
+  }
+  const priority = ['maire', 'president', 'vice_president', 'adjoint', 'conseiller_departemental', 'conseiller_communautaire', 'conseiller']
+  for (const role of priority) {
+    if (mandats.some((m: any) => m.role === role)) return role
+  }
+  return mandats[0]?.role || 'conseiller'
+}
+
+function getOrdre(e: any): number {
+  const mandats = Array.isArray(e.mandats) ? e.mandats : []
+  const m = collectivite
+    ? mandats.find((m: any) => String(m.collectivite) === collectivite)
+    : mandats[0]
+  return m?.ordreAdjoint || 99
+}
+
+function getCommuneOrigine(e: any): string | null {
+  const mandats = Array.isArray(e.mandats) ? e.mandats : []
+  if (!collectivite) return null
+  const m = mandats.find((m: any) => String(m.collectivite) === collectivite)
+  return m?.commune || null
+}
+
+function getDelegationMandat(e: any): string | null {
+  const mandats = Array.isArray(e.mandats) ? e.mandats : []
+  if (!collectivite) return e.delegations || null
+  const m = mandats.find((m: any) => String(m.collectivite) === collectivite)
+  return m?.delegations || (String(collectivite) === '1' ? e.delegations : null)
+}
+
+function getPosteCommunal(e: any): { role: string; ordre?: number } | null {
+  const mandats = Array.isArray(e.mandats) ? e.mandats : []
+  const communal = mandats.find((m: any) => {
+    const coll = collectivitesAll.find((c: any) => c.id === m.collectivite)
+    return coll?.type === 'commune'
+  })
+  if (!communal) return null
+  return { role: communal.role, ordre: communal.ordreAdjoint }
+}
+
+const roleLabel: Record<string, string> = {
+  maire: 'Maire', adjoint: 'Adjoint(e)', conseiller: 'Conseiller(ère)',
+  president: 'Président(e)', vice_president: 'Vice-président(e)',
+  conseiller_communautaire: 'Conseiller(ère) communautaire',
+  conseiller_departemental: 'Conseiller(ère) départemental(e)',
+}
+
+const sectionConfig: Record<string, { title: string; color: string; order: number }> = {
+  maire: { title: 'Maire', color: 'border-green-700', order: 0 },
+  president: { title: 'Président(e)', color: 'border-green-700', order: 0 },
+  vice_president: { title: 'Vice-président(e)s', color: 'border-green-600', order: 1 },
+  adjoint: { title: 'Adjoint(e)s', color: 'border-green-500', order: 2 },
+  conseiller_departemental: { title: 'Conseillers départementaux', color: 'border-purple-500', order: 3 },
+  conseiller_communautaire: { title: 'Conseillers communautaires', color: 'border-blue-500', order: 4 },
+  conseiller: { title: 'Conseillers municipaux', color: 'border-gray-300', order: 5 },
+}
+
+// Couleurs par liste (opposition)
+const listeColors: Record<string, string> = {}
+const oppoColors = ['bg-orange-50 border-orange-200', 'bg-blue-50 border-blue-200', 'bg-purple-50 border-purple-200', 'bg-rose-50 border-rose-200']
+let colorIdx = 0
+const listes = [...new Set(elus.map((e: any) => e.liste_electorale).filter((l: string) => l && l !== listeMajoritaire))]
+for (const l of listes) {
+  listeColors[l] = oppoColors[colorIdx % oppoColors.length]
+  colorIdx++
+}
+
+type EluWithRole = { elu: any; role: string; ordre: number; opposition: boolean }
+const elusWithRoles: EluWithRole[] = elus.map((e: any) => ({
+  elu: e, role: getRole(e), ordre: getOrdre(e), opposition: isOpposition(e),
+}))
+
+// Trier : par rôle, puis majorité avant opposition, puis délégation avant sans, puis nom
+elusWithRoles.sort((a, b) => {
+  const oa = sectionConfig[a.role]?.order ?? 99
+  const ob = sectionConfig[b.role]?.order ?? 99
+  if (oa !== ob) return oa - ob
+  if (a.opposition !== b.opposition) return a.opposition ? 1 : -1
+  if (a.ordre !== b.ordre) return a.ordre - b.ordre
+  // Conseillers avec délégation avant ceux sans
+  const aDel = a.elu.delegations ? 0 : 1
+  const bDel = b.elu.delegations ? 0 : 1
+  if (aDel !== bDel) return aDel - bDel
+  return a.elu.nom.localeCompare(b.elu.nom)
+})
+
+// Grouper en sections
+const sections: { role: string; title: string; color: string; items: EluWithRole[] }[] = []
+let currentRole = ''
+for (const item of elusWithRoles) {
+  if (item.role !== currentRole) {
+    currentRole = item.role
+    const cfg = sectionConfig[item.role] || { title: item.role, color: 'border-gray-300', order: 99 }
+    sections.push({ role: item.role, title: cfg.title, color: cfg.color, items: [] })
+  }
+  sections[sections.length - 1].items.push(item)
+}
+
+const totalFemmes = elus.filter((e: any) => e.sexe === 'F').length
+const totalHommes = elus.filter((e: any) => e.sexe === 'M').length
+const totalOppo = elusWithRoles.filter(e => e.opposition).length
+---
+
+<Layout title="Élus — Plateforme Citoyenne">
+  <div class="mb-6">
+    <h1 class="text-3xl font-bold">Élus</h1>
+    <div class="mt-2 flex flex-wrap gap-4 text-sm text-gray-500">
+      <span>{elus.length} élu(e)s</span>
+      <span>{totalFemmes} femmes / {totalHommes} hommes</span>
+    </div>
+    {listeMajoritaire && listes.length > 0 && (
+      <div class="mt-3 flex flex-wrap gap-2 text-xs">
+        <span class="rounded-full bg-green-50 border border-green-200 px-2.5 py-1 text-green-700">{listeMajoritaire} (majorité)</span>
+        {listes.map((l) => (
+          <span class={`rounded-full px-2.5 py-1 ${listeColors[l]?.replace('bg-', 'text-').replace('-50', '-700').replace('border-', 'text-').split(' ')[0]} ${listeColors[l]}`}>
+            {l} (opposition)
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
+
+  {sections.map((section) => (
+    <section class="mb-8">
+      <h2 class={`text-xl font-bold mb-4 pb-2 border-b-2 ${section.color}`}>
+        {section.title}
+        <span class="text-sm font-normal text-gray-400 ml-2">({section.items.length})</span>
+      </h2>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {section.items.map(({ elu: e, role, ordre, opposition }) => {
+          const oppoStyle = opposition ? (listeColors[e.liste_electorale] || 'bg-gray-50 border-gray-200') : ''
+          return (
+            <a href={`/elus/${e.id}`} class={`flex items-center gap-3 rounded-lg border p-4 transition-colors ${
+              opposition
+                ? `${oppoStyle} hover:opacity-80`
+                : 'border-gray-200 hover:border-green-300 hover:bg-green-50'
+            }`}>
+              <div class={`flex h-12 w-12 items-center justify-center rounded-full font-bold text-lg shrink-0 ${
+                opposition ? 'bg-gray-300 text-gray-600' :
+                role === 'maire' || role === 'president' ? 'bg-green-800 text-white' :
+                role === 'adjoint' || role === 'vice_president' ? 'bg-green-600 text-white' :
+                'bg-green-100 text-green-800'
+              }`}>
+                {e.prenom?.[0]}{e.nom?.[0]}
+              </div>
+              <div class="min-w-0">
+                <div class="font-semibold">{e.prenom} {e.nom}</div>
+                <div class="text-sm text-gray-500">
+                  {roleLabel[role] || role}
+                  {ordre < 99 && (role === 'adjoint' || role === 'vice_president') ? ` (${ordre}${ordre === 1 ? 'er' : 'e'})` : ''}
+                </div>
+                {isInterOuCanton && (() => {
+                  const commune = getCommuneOrigine(e)
+                  const poste = getPosteCommunal(e)
+                  const roleStr = poste ? (roleLabel[poste.role] || poste.role) + (poste.ordre && poste.ordre < 99 ? ` (${poste.ordre}${poste.ordre === 1 ? 'er' : 'e'})` : '') : null
+                  return (
+                    <div class="text-xs text-blue-700 font-medium truncate">
+                      {commune}{roleStr && <span class="text-gray-500 font-normal"> — {roleStr}</span>}
+                    </div>
+                  )
+                })()}
+                {getDelegationMandat(e) && (
+                  <div class="text-xs text-gray-500 truncate">{getDelegationMandat(e)}</div>
+                )}
+                {e.liste_electorale && (
+                  <div class={`text-xs mt-0.5 truncate ${opposition ? 'text-gray-500 font-medium' : 'text-gray-400'}`}>
+                    {e.liste_electorale}
+                  </div>
+                )}
+              </div>
+            </a>
+          )
+        })}
+      </div>
+    </section>
+  ))}
+
+  {elus.length === 0 && (
+    <p class="text-gray-500">Aucun élu enregistré. Lancez l'import RNE.</p>
+  )}
+
+  <p class="mt-4 text-xs text-gray-400">
+    Source : site officiel mairie-islejourdain.fr — Données publiques.
+  </p>
+</Layout>

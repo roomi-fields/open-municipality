@@ -1,0 +1,144 @@
+---
+import Layout from '../layouts/Layout.astro'
+import { DIRECTUS_URL } from '../lib/directus'
+---
+
+<Layout title="Newsletter — Plateforme Citoyenne">
+  <div class="mx-auto max-w-lg">
+    <h1 class="text-3xl font-bold mb-2">Newsletter citoyenne</h1>
+    <p class="text-gray-500 mb-6">
+      Recevez un email avant chaque conseil municipal et communautaire (J-7).
+      Pas de spam, pas de tracking — uniquement les séances à venir.
+    </p>
+
+    <div id="form-container">
+      <form id="newsletter-form" class="space-y-4">
+        <div>
+          <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Votre email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            required
+            placeholder="jean@example.fr"
+            class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+          />
+        </div>
+
+        <div>
+          <label for="commune" class="block text-sm font-medium text-gray-700 mb-1">Votre commune (optionnel)</label>
+          <input
+            type="text"
+            id="commune"
+            name="commune"
+            placeholder="L'Isle-Jourdain"
+            class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+          />
+        </div>
+
+        <button
+          type="submit"
+          class="w-full rounded-lg bg-green-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-800 transition-colors"
+        >
+          S'inscrire à la newsletter
+        </button>
+      </form>
+    </div>
+
+    <div id="success-msg" class="hidden rounded-lg bg-green-50 border border-green-200 p-6 text-center">
+      <p class="text-lg font-semibold text-green-800">Inscription confirmée !</p>
+      <p class="text-sm text-green-600 mt-2">Vous recevrez un email avant chaque séance du conseil.</p>
+    </div>
+
+    <div id="error-msg" class="hidden rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700 mt-4"></div>
+
+    <div class="mt-8 rounded-lg bg-gray-50 p-4 text-sm text-gray-500 space-y-2">
+      <p><strong>Ce que vous recevrez :</strong></p>
+      <ul class="list-disc pl-5 space-y-1">
+        <li>Un rappel 7 jours avant chaque conseil municipal</li>
+        <li>Un rappel 7 jours avant chaque conseil communautaire</li>
+        <li>L'ordre du jour quand il est disponible</li>
+      </ul>
+      <p class="mt-3"><strong>Ce que vous ne recevrez pas :</strong></p>
+      <ul class="list-disc pl-5 space-y-1">
+        <li>Aucune publicité, aucun partenaire</li>
+        <li>Aucun email politique ou partisan</li>
+      </ul>
+      <p class="mt-3 text-xs text-gray-400">
+        Désinscription possible à tout moment. Données non partagées.
+      </p>
+    </div>
+  </div>
+
+  <script define:vars={{ DIRECTUS_URL }}>
+    const form = document.getElementById('newsletter-form')
+    const successMsg = document.getElementById('success-msg')
+    const errorMsg = document.getElementById('error-msg')
+    const formContainer = document.getElementById('form-container')
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      errorMsg.classList.add('hidden')
+
+      const email = document.getElementById('email').value.trim()
+      const commune = document.getElementById('commune').value.trim()
+      if (!email) return
+
+      const password = crypto.randomUUID()
+
+      try {
+        // 1. Enregistrer l'utilisateur
+        const regResp = await fetch(`${DIRECTUS_URL}/users/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        })
+
+        if (regResp.ok || regResp.status === 204) {
+          // 2. Se connecter pour activer newsletter
+          const loginResp = await fetch(`${DIRECTUS_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+          })
+
+          if (loginResp.ok) {
+            const loginData = await loginResp.json()
+            const token = loginData.data?.access_token
+
+            // 3. Mettre à jour newsletter=true et commune
+            await fetch(`${DIRECTUS_URL}/users/me`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({ newsletter: true, commune: commune || null }),
+            })
+          }
+
+          formContainer.classList.add('hidden')
+          successMsg.classList.remove('hidden')
+          return
+        }
+
+        // Email déjà utilisé
+        const data = await regResp.json()
+        const errText = data.errors?.[0]?.message || ''
+        if (errText.includes('unique') || errText.includes('RECORD_NOT_UNIQUE') || regResp.status === 400) {
+          formContainer.classList.add('hidden')
+          successMsg.classList.remove('hidden')
+          successMsg.querySelector('p:last-child').textContent =
+            'Cet email est déjà enregistré. Connectez-vous pour gérer vos préférences.'
+          return
+        }
+
+        errorMsg.textContent = errText || 'Erreur lors de l\'inscription.'
+        errorMsg.classList.remove('hidden')
+      } catch (err) {
+        errorMsg.textContent = 'Erreur de connexion. Vérifiez votre connexion internet.'
+        errorMsg.classList.remove('hidden')
+      }
+    })
+  </script>
+</Layout>
