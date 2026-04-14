@@ -14,6 +14,22 @@ const collectivites = await fetchItems('collectivites', { limit: '50', fields: '
 const collMap: Record<number, any> = {}
 for (const c of collectivites) collMap[c.id] = c
 
+// Charger les délibérations "à venir" matérialisées pour permettre de cliquer et voter
+const delibsAVenir = await fetchItems('deliberations', {
+  'filter[statut][_eq]': 'a_venir',
+  limit: '500',
+  fields: 'id,numero,titre,seance',
+})
+// Map : `${seanceId}-${ojNumero}` → delibId (extrait depuis numero "OJ-YYYY-MM-DD-NNN")
+const delibByOJ: Record<string, number> = {}
+for (const d of delibsAVenir) {
+  const match = d.numero?.match(/^OJ-\d{4}-\d{2}-\d{2}-(\d+)$/)
+  if (match) {
+    const num = parseInt(match[1], 10)
+    delibByOJ[`${d.seance}-${num}`] = d.id
+  }
+}
+
 // Engagements de campagne pour matching OJ ↔ Programme
 const engagements: Engagement[] = await fetchItems('engagements', {
   limit: '200',
@@ -96,11 +112,19 @@ function formatDate(iso: string): string {
                     <ul class="space-y-2">
                       {items.map((it: OJItem) => {
                         const matches = matchEngagements(it.titre, engagements, { maxResults: 3 })
+                        const delibId = delibByOJ[`${s.id}-${it.numero}`]
                         return (
                           <li class="flex items-start gap-2 text-sm">
                             <span class="text-gray-400 font-mono shrink-0 w-6 text-right">{it.numero}.</span>
                             <div class="flex-1">
-                              <span>{it.titre}</span>
+                              {delibId ? (
+                                <a href={`/deliberations/${delibId}`} class="hover:underline hover:text-green-700">
+                                  {it.titre}
+                                  <span class="ml-2 text-xs text-green-700 font-medium">→ Voter</span>
+                                </a>
+                              ) : (
+                                <span>{it.titre}</span>
+                              )}
                               {matches.length > 0 && (
                                 <div class="mt-1 flex flex-wrap gap-1.5">
                                   <span class="text-xs text-gray-400">↳ Engagement{matches.length > 1 ? 's' : ''} lié{matches.length > 1 ? 's' : ''} :</span>
