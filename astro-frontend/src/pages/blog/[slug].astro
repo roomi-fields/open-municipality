@@ -1,0 +1,68 @@
+---
+export const prerender = false
+
+import Layout from '../../layouts/Layout.astro'
+import { fetchItems } from '../../lib/directus'
+
+const { slug } = Astro.params
+const items = await fetchItems('articles', {
+  'filter[slug][_eq]': slug!,
+  'filter[statut][_eq]': 'publie',
+  limit: '1',
+  fields: 'id,title,slug,excerpt,content,date_publication,author,image_url,source_url',
+})
+const article = items[0]
+if (!article) return Astro.redirect('/blog')
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function decodeHtml(s: string): string {
+  return s.replace(/&#8217;/g, '\u2019').replace(/&#8211;/g, '\u2013').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&nbsp;/g, ' ')
+}
+---
+
+<Layout title={`${article.title} — Blog`}>
+  <a href="/blog" class="text-sm text-gray-500 hover:text-green-700">← Retour au blog</a>
+
+  <article class="mt-4 max-w-3xl">
+    <header class="mb-6">
+      <h1 class="text-3xl font-bold" set:html={decodeHtml(article.title)} />
+      <div class="mt-2 text-sm text-gray-500 capitalize">
+        {formatDate(article.date_publication)}
+        {article.author && <span> · {article.author}</span>}
+      </div>
+    </header>
+
+    {article.image_url && (
+      <img src={article.image_url} alt="" class="mb-6 rounded-lg" />
+    )}
+
+    <div class="prose-article" set:html={article.content} />
+
+    {article.source_url && (
+      <p class="mt-8 text-xs text-gray-400">
+        Article initialement publié sur <a href={article.source_url} class="underline hover:text-green-700">{article.source_url}</a>
+      </p>
+    )}
+  </article>
+</Layout>
+
+<style is:global>
+  .prose-article { line-height: 1.7; color: #1f2937; }
+  .prose-article h2 { font-size: 1.5rem; font-weight: bold; margin: 1.5rem 0 0.75rem; }
+  .prose-article h3 { font-size: 1.25rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+  .prose-article p { margin: 0.75rem 0; }
+  .prose-article a { color: #15803d; text-decoration: underline; }
+  .prose-article a:hover { color: #166534; }
+  .prose-article ul, .prose-article ol { margin: 0.75rem 0 0.75rem 1.5rem; }
+  .prose-article ul { list-style-type: disc; }
+  .prose-article ol { list-style-type: decimal; }
+  .prose-article li { margin: 0.25rem 0; }
+  .prose-article blockquote { border-left: 3px solid #15803d; padding-left: 1rem; color: #4b5563; font-style: italic; margin: 1rem 0; }
+  .prose-article img { border-radius: 0.5rem; margin: 1rem 0; max-width: 100%; height: auto; }
+  .prose-article iframe { max-width: 100%; margin: 1rem 0; border-radius: 0.5rem; }
+  .prose-article strong { font-weight: 600; }
+</style>

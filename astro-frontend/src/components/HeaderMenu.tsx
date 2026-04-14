@@ -1,36 +1,21 @@
 import { useState, useEffect } from 'react'
 
-const DIRECTUS_URL = 'http://localhost:8055'
+interface MeResponse { user: { sub: string; email: string; pseudo: string } | null }
 
 export default function HeaderMenu() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<MeResponse['user']>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    const token = localStorage.getItem('directus_token')
-    if (!token) return
-    fetch(`${DIRECTUS_URL}/users/me`, {
-      headers: { 'Authorization': `Bearer ${token}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.data) setUser(data.data) })
+    fetch('/api/me')
+      .then(r => r.ok ? r.json() : { user: null })
+      .then((d: MeResponse) => setUser(d.user))
       .catch(() => {})
+      .finally(() => setLoaded(true))
   }, [])
 
-  async function handleLogout() {
-    const token = localStorage.getItem('directus_token')
-    if (token) {
-      await fetch(`${DIRECTUS_URL}/auth/logout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: localStorage.getItem('directus_refresh') }),
-      }).catch(() => {})
-    }
-    localStorage.removeItem('directus_token')
-    localStorage.removeItem('directus_refresh')
-    setUser(null)
-    window.location.href = '/'
-  }
+  if (!loaded) return null
 
   if (!user) {
     return (
@@ -47,27 +32,18 @@ export default function HeaderMenu() {
         className="flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1.5 text-green-800 hover:bg-green-100 text-sm"
       >
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-green-700 text-xs text-white font-bold">
-          {(user.pseudo || user.email || '?')[0].toUpperCase()}
+          {user.pseudo[0].toUpperCase()}
         </span>
-        {user.pseudo || user.email}
+        {user.pseudo}
       </button>
       {menuOpen && (
         <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg z-50">
-          <div className="px-3 py-2 text-xs text-gray-400 border-b border-gray-100">
-            {user.role_citoyen === 'admin' ? 'Administrateur' : 'Citoyen'}
-          </div>
-          {user.role_citoyen === 'admin' && (
-            <a href="http://localhost:8055/admin" className="block px-3 py-2 text-sm hover:bg-gray-50">
-              Administration
-            </a>
-          )}
-          <a href="/newsletter" className="block px-3 py-2 text-sm hover:bg-gray-50">Newsletter</a>
-          <button
-            onClick={handleLogout}
-            className="block w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-          >
-            Se deconnecter
-          </button>
+          <a href="/mon-espace" className="block px-3 py-2 text-sm hover:bg-gray-50">Mon espace</a>
+          <form action="/api/auth/logout" method="POST" className="border-t border-gray-100">
+            <button type="submit" className="block w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
+              Se déconnecter
+            </button>
+          </form>
         </div>
       )}
     </div>

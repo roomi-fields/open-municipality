@@ -1,0 +1,47 @@
+---
+import Layout from '../../layouts/Layout.astro'
+import { fetchItems } from '../../lib/directus'
+
+const articles = await fetchItems('articles', {
+  'filter[statut][_eq]': 'publie',
+  sort: '-date_publication',
+  limit: '50',
+  fields: 'id,title,slug,excerpt,date_publication,author,image_url',
+})
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function decodeHtml(s: string): string {
+  return s.replace(/&#8217;/g, '\u2019').replace(/&#8211;/g, '\u2013').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&nbsp;/g, ' ')
+}
+---
+
+<Layout title="Blog — Plateforme Citoyenne Lisloise">
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold">Blog</h1>
+    <p class="mt-2 text-sm text-gray-500">{articles.length} article{articles.length > 1 ? 's' : ''}</p>
+  </div>
+
+  {articles.length === 0 ? (
+    <p class="text-gray-500">Aucun article publié pour l'instant.</p>
+  ) : (
+    <div class="space-y-6">
+      {articles.map((a: any) => (
+        <article class="border-b border-gray-100 pb-6">
+          <a href={`/blog/${a.slug}`} class="block group">
+            <h2 class="text-xl font-bold group-hover:text-green-700" set:html={decodeHtml(a.title)} />
+            <div class="mt-1 text-xs text-gray-500">
+              {formatDate(a.date_publication)}
+              {a.author && <span> · {a.author}</span>}
+            </div>
+            {a.excerpt && <p class="mt-2 text-sm text-gray-600 line-clamp-3" set:html={decodeHtml(a.excerpt)} />}
+            <span class="mt-2 inline-block text-sm font-medium text-green-700 group-hover:underline">Lire →</span>
+          </a>
+        </article>
+      ))}
+    </div>
+  )}
+</Layout>

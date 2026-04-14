@@ -1,0 +1,223 @@
+#
+# docker-compose.prod.yml — Open Municipality production
+#
+# Usage :
+#   cp .env.prod.example .env.prod
+#   # éditer .env.prod avec les vraies valeurs (mots de passe forts, clés API, domaine…)
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# Les ports sont bindés sur 127.0.0.1 pour que votre reverse proxy hôte
+# (Caddy / nginx / Traefik côté hôte) prenne en charge SSL + routage du domaine.
+#
+# Mapping RP suggéré :
+#   plateformecitoyennelisloise.fr         → 127.0.0.1:3333  (Astro SSR)
+#   admin.plateformecitoyennelisloise.fr   → 127.0.0.1:8055  (Directus admin)
+#   stats.plateformecitoyennelisloise.fr   → 127.0.0.1:8000  (Plausible, optionnel)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: open_municipality
+      POSTGRES_USER: om_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    # Pas de ports exposés — accès interne uniquement via le network docker
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U om_user -d open_municipality"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  directus:
+    image: directus/directus:11
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8055:8055"
+    environment:
+      DB_CLIENT: pg
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: open_municipality
+      DB_USER: om_user
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      SECRET: ${DIRECTUS_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+      PUBLIC_URL: ${DIRECTUS_PUBLIC_URL}
+      CORS_ENABLED: "true"
+      CORS_ORIGIN: ${SITE_URL}
+
+      USERS_REGISTER_ENABLED: "false"
+    volumes:
+      - directus_uploads:/directus/uploads
+      - directus_extensions:/directus/extensions
+
+  frontend:
+    build: ./astro-frontend
+    restart: unless-stopped
+    depends_on:
+      - directus
+    ports:
+      - "127.0.0.1:3333:3333"
+    environment:
+      # Depuis le container Astro, on tape directement le service directus
+      DIRECTUS_URL: http://directus:8055
+      # Email admin pour auth Directus depuis Astro (endpoints API)
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # JWT de session des citoyens
+      JWT_SECRET: ${JWT_SECRET}
+      # Brevo pour envoi magic link / notifs CM
+      BREVO_API_KEY: ${BREVO_API_KEY}
+      EMAIL_FROM_ADDR: ${EMAIL_FROM_ADDR}
+      # URL publique pour construire les magic links
+      SITE_URL: ${SITE_URL}
+      # Analytics Plausible
+      PLAUSIBLE_DOMAIN: ${PLAUSIBLE_DOMAIN}
+      PLAUSIBLE_SRC: ${PLAUSIBLE_SRC}
+
+  scraper-seances:
+    build: ./scripts
+    restart: unless-stopped
+    depends_on:
+      - directus
+    environment:
+      DIRECTUS_URL: http://directus:8055
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    volumes:
+      - scraper_data:/app/data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          echo "--- scraper-seances $$(date) ---"
+          node --import tsx scraper-seances.ts 2>&1 || true
+          sleep 21600  # 6h
+        done
+
+  scraper-pv:
+    build: ./scripts
+    restart: unless-stopped
+    depends_on:
+      - directus
+    environment:
+      DIRECTUS_URL: http://directus:8055
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    volumes:
+      - scraper_data:/app/data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          echo "--- scraper+pipeline $$(date) ---"
+          node --import tsx scraper.ts 2>&1 || true
+          if [ -n "$$ANTHROPIC_API_KEY" ]; then
+            node --import tsx pipeline.ts 2>&1 || true
+          fi
+          sleep 43200  # 12h
+        done
+
+  rne-updater:
+    build: ./scripts
+    restart: unless-stopped
+    depends_on:
+      - directus
+    environment:
+      DIRECTUS_URL: http://directus:8055
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    volumes:
+      - scraper_data:/app/data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          echo "--- RNE update $$(date) ---"
+          node --import tsx import-rne.ts --download 2>&1 || true
+          sleep 2592000  # 30j
+        done
+
+  notifier:
+    build: ./scripts
+    restart: unless-stopped
+    depends_on:
+      - directus
+    environment:
+      DIRECTUS_URL: http://directus:8055
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      BREVO_API_KEY: ${BREVO_API_KEY}
+      EMAIL_FROM_ADDR: ${EMAIL_FROM_ADDR}
+      SITE_URL: ${SITE_URL}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          if [ -n "$$BREVO_API_KEY" ]; then
+            echo "--- notify-seances $$(date) ---"
+            node --import tsx notify-seances.ts 2>&1 || true
+          fi
+          sleep 86400  # 24h
+        done
+
+  # === Plausible Community Edition (analytics) =====================
+  plausible_db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${PLAUSIBLE_POSTGRES_PASSWORD}
+    volumes:
+      - plausible_db:/var/lib/postgresql/data
+
+  plausible_events_db:
+    image: clickhouse/clickhouse-server:24.12-alpine
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - plausible_events:/var/lib/clickhouse
+      - ./plausible/clickhouse-config.xml:/etc/clickhouse-server/config.d/logging.xml:ro
+      - ./plausible/clickhouse-user-config.xml:/etc/clickhouse-server/users.d/logging.xml:ro
+
+  plausible:
+    image: ghcr.io/plausible/community-edition:v3.0.1
+    restart: unless-stopped
+    depends_on:
+      - plausible_db
+      - plausible_events_db
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      BASE_URL: ${PLAUSIBLE_BASE_URL}
+      SECRET_KEY_BASE: ${PLAUSIBLE_SECRET_KEY_BASE}
+      DATABASE_URL: postgres://postgres:${PLAUSIBLE_POSTGRES_PASSWORD}@plausible_db:5432/plausible_db
+      CLICKHOUSE_DATABASE_URL: http://plausible_events_db:8123/plausible_events_db
+      DISABLE_REGISTRATION: invite_only
+      MAILER_EMAIL: ${EMAIL_FROM_ADDR}
+      SMTP_HOST_ADDR: smtp-relay.brevo.com
+      SMTP_HOST_PORT: 587
+      SMTP_USER_NAME: ${BREVO_SMTP_USER}
+      SMTP_USER_PWD: ${BREVO_SMTP_PASSWORD}
+    command: sh -c "/entrypoint.sh db createdb && /entrypoint.sh db migrate && /entrypoint.sh run"
+
+volumes:
+  pg_data:
+  directus_uploads:
+  directus_extensions:
+  scraper_data:
+  plausible_db:
+  plausible_events:

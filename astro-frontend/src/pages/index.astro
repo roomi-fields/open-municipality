@@ -1,108 +1,163 @@
 ---
 import Layout from '../layouts/Layout.astro'
-import { fetchItems, getSeanceIds } from '../lib/directus'
+import { fetchItems } from '../lib/directus'
 
-const collectivite = Astro.url.searchParams.get('collectivite') || ''
+// Prochaines séances (CM + CCGT)
+const prochainesSeances = await fetchItems('seances', {
+  'filter[statut][_eq]': 'a_venir',
+  sort: 'date',
+  limit: '2',
+  fields: 'id,date,type,lieu,collectivite,ordre_jour_items',
+})
+const prochainCM = prochainesSeances.find((s: any) => s.type === 'conseil_municipal') || null
+const ojCount = Array.isArray(prochainCM?.ordre_jour_items) ? prochainCM.ordre_jour_items.length : 0
 
-const delibParams: Record<string, string> = {
+// Dernières délibérations (toutes collectivités)
+const deliberations = await fetchItems('deliberations', {
   'filter[statut][_eq]': 'publie',
   sort: '-id',
-  limit: '5',
-  'fields': 'id,numero,titre,resume_ia,vote_pour,vote_contre,vote_abstention,budget_montant',
+  limit: '4',
+  fields: 'id,numero,titre,resume_ia,vote_pour,vote_contre,vote_abstention,budget_montant,seance.date,seance.type',
+})
+
+// Derniers articles de blog
+const derniersArticles = await fetchItems('articles', {
+  'filter[statut][_eq]': 'publie',
+  sort: '-date_publication',
+  limit: '3',
+  fields: 'id,title,slug,excerpt,date_publication,author',
+})
+
+// Stats programme
+const engagements = await fetchItems('engagements', { limit: '200', fields: 'id,statut' })
+const totalEng = engagements.length
+const realises = engagements.filter((e: any) => e.statut === 'realise').length
+const enCours = engagements.filter((e: any) => e.statut === 'en_cours').length
+const pctAvance = totalEng > 0 ? Math.round(((realises + enCours / 2) / totalEng) * 100) : 0
+
+function decodeHtml(s: string): string {
+  return (s || '').replace(/&#8217;/g, '\u2019').replace(/&#8211;/g, '\u2013').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&nbsp;/g, ' ')
 }
-if (collectivite) {
-  const seanceIds = await getSeanceIds(collectivite)
-  if (seanceIds.length > 0) {
-    delibParams['filter[seance][_in]'] = seanceIds.join(',')
-  } else {
-    delibParams['filter[seance][_eq]'] = '-1' // aucun résultat
-  }
+function formatDateShort(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
 }
-const deliberations = await fetchItems('deliberations', delibParams)
-const signalements = await fetchItems('signalements', { sort: '-id', limit: '4' })
-const petitions = await fetchItems('petitions', { 'filter[statut][_eq]': 'ouverte', sort: '-id', limit: '3' })
+
+function formatDateLong(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
 ---
 
-<Layout title="Plateforme Citoyenne Lisloise — Accueil">
-  <div class="mb-12">
-    <h1 class="text-4xl font-bold text-green-800 mb-2">Plateforme Citoyenne</h1>
-    <p class="text-lg text-gray-600">Transparence et participation démocratique — L'Isle-Jourdain & Gascogne Toulousaine</p>
-  </div>
+<Layout title="Plateforme Citoyenne Lisloise">
+  <!-- Hero -->
+  <section class="mb-10">
+    <h1 class="text-4xl font-bold text-green-800">Plateforme Citoyenne Lisloise</h1>
+    <p class="mt-2 text-lg text-gray-600">Transparence, participation et contrôle citoyen de la vie municipale de L'Isle-Jourdain.</p>
+  </section>
 
-  <div class="grid gap-8 md:grid-cols-3">
-    <!-- Dernières délibérations -->
-    <div class="md:col-span-2">
-      <h2 class="text-2xl font-bold mb-4">Dernières délibérations</h2>
-      <div class="space-y-4">
+  <!-- Prochain conseil en vedette -->
+  {prochainCM && (
+    <section class="mb-10 rounded-lg border-l-4 border-green-700 bg-green-50 p-6">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div class="text-xs font-semibold uppercase tracking-wide text-green-700">Prochain conseil municipal</div>
+          <h2 class="mt-1 text-2xl font-bold capitalize">{formatDateLong(prochainCM.date)}</h2>
+          {prochainCM.lieu && <p class="mt-1 text-sm text-gray-600">📍 {prochainCM.lieu}</p>}
+          {ojCount > 0 && <p class="mt-2 text-sm text-gray-700">{ojCount} points à l'ordre du jour</p>}
+        </div>
+        <a href="/seances" class="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800">
+          Voir l'ordre du jour →
+        </a>
+      </div>
+    </section>
+  )}
+
+  <!-- Services -->
+  <section class="mb-12">
+    <h2 class="mb-4 text-xl font-bold">Ce que vous pouvez faire ici</h2>
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <a href="/seances" class="group rounded-lg border border-gray-200 p-5 transition-colors hover:border-green-400 hover:bg-green-50">
+        <div class="text-2xl">📅</div>
+        <h3 class="mt-2 font-semibold group-hover:text-green-800">Prochains conseils</h3>
+        <p class="mt-1 text-sm text-gray-600">Ordres du jour, lieux, horaires — à l'avance.</p>
+      </a>
+      <a href="/deliberations" class="group rounded-lg border border-gray-200 p-5 transition-colors hover:border-green-400 hover:bg-green-50">
+        <div class="text-2xl">🗳️</div>
+        <h3 class="mt-2 font-semibold group-hover:text-green-800">Délibérations</h3>
+        <p class="mt-1 text-sm text-gray-600">Chaque vote du conseil, résumé, commenté, votable en miroir.</p>
+      </a>
+      <a href="/elus" class="group rounded-lg border border-gray-200 p-5 transition-colors hover:border-green-400 hover:bg-green-50">
+        <div class="text-2xl">👥</div>
+        <h3 class="mt-2 font-semibold group-hover:text-green-800">Élus</h3>
+        <p class="mt-1 text-sm text-gray-600">Rôles, mandats, présences, votes, intérêts déclarés.</p>
+      </a>
+      <a href="/engagements" class="group rounded-lg border border-gray-200 p-5 transition-colors hover:border-green-400 hover:bg-green-50">
+        <div class="text-2xl">📊</div>
+        <h3 class="mt-2 font-semibold group-hover:text-green-800">Suivi du programme</h3>
+        <p class="mt-1 text-sm text-gray-600">{totalEng} engagements de campagne — {pctAvance}% d'avancement.</p>
+      </a>
+    </div>
+  </section>
+
+  <!-- Dernières délibérations -->
+  {deliberations.length > 0 && (
+    <section class="mb-12">
+      <div class="mb-4 flex items-baseline justify-between">
+        <h2 class="text-xl font-bold">Dernières délibérations</h2>
+        <a href="/deliberations" class="text-sm font-medium text-green-700 hover:underline">Tout voir →</a>
+      </div>
+      <div class="grid gap-3 md:grid-cols-2">
         {deliberations.map((d: any) => (
-          <a href={`/deliberations/${d.id}`} class="block rounded-lg border border-gray-200 p-4 hover:border-green-300 hover:bg-green-50 transition-colors">
-            <div class="flex items-start justify-between">
-              <div>
-                <span class="text-xs font-mono text-gray-400">{d.numero}</span>
-                <h3 class="font-semibold text-green-800 mt-0.5">{d.titre}</h3>
-                <p class="text-sm text-gray-600 mt-1 line-clamp-2">{d.resume_ia}</p>
-              </div>
-              {d.budget_montant && (
-                <span class="ml-4 whitespace-nowrap rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-800">
-                  {d.budget_montant.toLocaleString('fr-FR')} €
-                </span>
-              )}
+          <a href={`/deliberations/${d.id}`} class="rounded-lg border border-gray-200 p-4 transition-colors hover:border-green-300 hover:bg-green-50">
+            <div class="flex items-center gap-2 text-xs">
+              <span class="font-mono text-gray-400">{d.numero}</span>
+              {d.seance?.type === 'conseil_communautaire' && <span class="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">CCGT</span>}
+              {d.seance?.type === 'conseil_municipal' && <span class="rounded-full bg-green-50 px-2 py-0.5 text-green-700">CM</span>}
             </div>
+            <h3 class="mt-1 font-semibold text-green-800 line-clamp-2">{d.titre}</h3>
+            {d.resume_ia && <p class="mt-1 text-sm text-gray-600 line-clamp-2">{d.resume_ia}</p>}
             <div class="mt-2 flex gap-3 text-xs text-gray-500">
-              <span class="text-green-600">Pour: {d.vote_pour}</span>
-              <span class="text-red-600">Contre: {d.vote_contre}</span>
-              <span class="text-gray-400">Abstention: {d.vote_abstention}</span>
+              <span class="text-green-600">Pour {d.vote_pour}</span>
+              <span class="text-red-600">Contre {d.vote_contre}</span>
+              <span class="text-gray-400">Abst. {d.vote_abstention}</span>
+              {d.budget_montant && <span class="ml-auto font-semibold text-yellow-700">{d.budget_montant.toLocaleString('fr-FR')} €</span>}
             </div>
           </a>
         ))}
       </div>
-      <a href="/deliberations" class="mt-4 inline-block text-sm font-medium text-green-700 hover:underline">
-        Voir toutes les délibérations →
-      </a>
-    </div>
+    </section>
+  )}
 
-    <!-- Sidebar -->
-    <div class="space-y-8">
-      <!-- Signalements -->
-      <div>
-        <h2 class="text-lg font-bold mb-3">Signalements récents</h2>
-        <div class="space-y-3">
-          {signalements.map((s: any) => (
-            <div class="rounded-lg border border-gray-100 p-3">
-              <div class="flex items-center gap-2">
-                <span class={`inline-block h-2 w-2 rounded-full ${
-                  s.statut === 'resolu' ? 'bg-green-500' :
-                  s.statut === 'en_cours' ? 'bg-yellow-500' : 'bg-red-500'
-                }`}></span>
-                <span class="text-xs font-medium text-gray-500 capitalize">{s.type}</span>
-              </div>
-              <p class="text-sm font-medium mt-1">{s.titre}</p>
-              {s.adresse && <p class="text-xs text-gray-400 mt-0.5">{s.adresse}</p>}
-            </div>
-          ))}
-        </div>
+  <!-- Derniers articles du blog -->
+  {derniersArticles.length > 0 && (
+    <section class="mb-12">
+      <div class="mb-4 flex items-baseline justify-between">
+        <h2 class="text-xl font-bold">Derniers articles du blog</h2>
+        <a href="/blog" class="text-sm font-medium text-green-700 hover:underline">Tous les articles →</a>
       </div>
+      <div class="grid gap-4 md:grid-cols-3">
+        {derniersArticles.map((a: any) => (
+          <a href={`/blog/${a.slug}`} class="group block rounded-lg border border-gray-200 p-4 transition-colors hover:border-green-300 hover:bg-green-50">
+            <div class="text-xs text-gray-400">{formatDateShort(a.date_publication)}{a.author && ` · ${a.author}`}</div>
+            <h3 class="mt-1 font-semibold group-hover:text-green-800 line-clamp-2" set:html={decodeHtml(a.title)} />
+            {a.excerpt && <p class="mt-2 text-sm text-gray-600 line-clamp-3" set:html={decodeHtml(a.excerpt)} />}
+          </a>
+        ))}
+      </div>
+    </section>
+  )}
 
-      <!-- Pétitions -->
-      <div>
-        <h2 class="text-lg font-bold mb-3">Pétitions en cours</h2>
-        <div class="space-y-3">
-          {petitions.map((p: any) => (
-            <div class="rounded-lg border border-gray-100 p-3">
-              <p class="text-sm font-medium">{p.titre}</p>
-              <div class="mt-2">
-                <div class="h-2 w-full rounded-full bg-gray-100">
-                  <div
-                    class="h-2 rounded-full bg-blue-600"
-                    style={`width: ${Math.min(100, (p.nombre_signatures / p.seuil) * 100)}%`}
-                  ></div>
-                </div>
-                <p class="text-xs text-gray-500 mt-1">{p.nombre_signatures} / {p.seuil} signatures</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- CTA inscription notifications -->
+  <section class="mb-8 rounded-lg bg-gray-50 p-6 text-center">
+    <h2 class="text-xl font-bold">Soyez alerté·e avant chaque conseil municipal</h2>
+    <p class="mt-1 text-sm text-gray-600">Recevez l'ordre du jour par email 7 jours avant la séance.</p>
+    <a href="/newsletter" class="mt-4 inline-block rounded-lg bg-green-700 px-5 py-2 text-sm font-semibold text-white hover:bg-green-800">
+      S'inscrire aux notifications
+    </a>
+  </section>
+
+  <p class="mt-8 text-center text-xs text-gray-400">
+    Outil open source · Données publiques · Aucun tracking commercial
+  </p>
 </Layout>

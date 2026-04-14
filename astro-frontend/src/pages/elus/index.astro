@@ -1,6 +1,13 @@
 ---
+export const prerender = false
+
 import Layout from '../../layouts/Layout.astro'
 import { fetchItems } from '../../lib/directus'
+
+// V1 : défaut LIJ → on redirige pour que l'URL reflète le filtre actif (cohérence avec le sélecteur)
+if (!Astro.url.searchParams.has('collectivite')) {
+  return Astro.redirect('/elus?collectivite=1')
+}
 
 const collectivite = Astro.url.searchParams.get('collectivite') || ''
 let elus = await fetchItems('elus', { sort: 'nom', limit: '200', fields: 'id,nom,prenom,sexe,profession,mandats,liste_electorale,date_debut_mandat,delegations' })

@@ -1,0 +1,159 @@
+---
+export const prerender = false
+import Layout from '../layouts/Layout.astro'
+import { getSessionCookie, directusAdmin } from '../lib/auth'
+
+const user = getSessionCookie(Astro.cookies)
+if (!user) return Astro.redirect('/connexion')
+
+const welcome = Astro.url.searchParams.has('welcome')
+
+// Charger profil citoyen
+const profileResp = await directusAdmin('GET', `/items/citoyens/${user.sub}`)
+const profile = profileResp.data
+
+// Charger mes votes
+const votesResp = await directusAdmin('GET', `/items/votes_citoyens?filter[utilisateur][_eq]=${user.sub}&limit=200&fields=id,choix,deliberation`)
+const votes = votesResp.data || []
+
+// Charger les délibs correspondantes + leur agrégat conseil
+const delibIds = [...new Set(votes.map((v: any) => v.deliberation))]
+let delibs: any[] = []
+if (delibIds.length > 0) {
+  const r = await directusAdmin('GET', `/items/deliberations?filter[id][_in]=${delibIds.join(',')}&limit=200&fields=id,numero,titre,vote_pour,vote_contre,vote_abstention`)
+  delibs = r.data || []
+}
+const delibMap: Record<number, any> = {}
+for (const d of delibs) delibMap[d.id] = d
+
+const votesPour = votes.filter((v: any) => v.choix === 'pour').length
+const votesContre = votes.filter((v: any) => v.choix === 'contre').length
+const votesAbst = votes.filter((v: any) => v.choix === 'abstention').length
+
+function choixLabel(c: string) {
+  return c === 'pour' ? 'Pour' : c === 'contre' ? 'Contre' : 'Abstention'
+}
+function choixColor(c: string) {
+  return c === 'pour' ? 'bg-green-100 text-green-800' : c === 'contre' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'
+}
+
+// Comparer vote citoyen vs conseil (conseil = majorité pour/contre/abst)
+function voteConseil(d: any): string {
+  if (!d) return ''
+  const max = Math.max(d.vote_pour || 0, d.vote_contre || 0, d.vote_abstention || 0)
+  if (max === d.vote_pour) return 'pour'
+  if (max === d.vote_contre) return 'contre'
+  return 'abstention'
+}
+---
+
+<Layout title="Mon espace — Plateforme Citoyenne Lisloise">
+  {welcome && (
+    <div class="mb-6 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+      Bienvenue {profile?.pseudo} 👋 Vous êtes connecté·e.
+    </div>
+  )}
+
+  <div class="mb-8 flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold">Mon espace</h1>
+      <p class="mt-1 text-sm text-gray-500">
+        {profile?.pseudo} · {profile?.email}
+      </p>
+    </div>
+    <form action="/api/auth/logout" method="POST">
+      <button type="submit" class="text-sm text-gray-500 hover:text-red-700">Se déconnecter</button>
+    </form>
+  </div>
+
+  <!-- Stats -->
+  <div class="mb-8 grid gap-4 sm:grid-cols-4">
+    <div class="rounded-lg border border-gray-200 p-4">
+      <div class="text-2xl font-bold">{votes.length}</div>
+      <div class="text-xs text-gray-500 uppercase">vote{votes.length !== 1 ? 's' : ''}</div>
+    </div>
+    <div class="rounded-lg border border-gray-200 p-4">
+      <div class="text-2xl font-bold text-green-700">{votesPour}</div>
+      <div class="text-xs text-gray-500 uppercase">pour</div>
+    </div>
+    <div class="rounded-lg border border-gray-200 p-4">
+      <div class="text-2xl font-bold text-red-700">{votesContre}</div>
+      <div class="text-xs text-gray-500 uppercase">contre</div>
+    </div>
+    <div class="rounded-lg border border-gray-200 p-4">
+      <div class="text-2xl font-bold text-gray-500">{votesAbst}</div>
+      <div class="text-xs text-gray-500 uppercase">abstention</div>
+    </div>
+  </div>
+
+  <!-- Mes votes -->
+  <section class="mb-10">
+    <h2 class="text-xl font-bold mb-4">Mes votes</h2>
+    {votes.length === 0 ? (
+      <p class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+        Vous n'avez pas encore voté. <a href="/deliberations" class="font-medium text-green-700 underline">Voir les délibérations</a>
+      </p>
+    ) : (
+      <div class="space-y-2">
+        {votes.map((v: any) => {
+          const d = delibMap[v.deliberation]
+          const vc = voteConseil(d)
+          const aligned = vc === v.choix
+          return (
+            <a href={`/deliberations/${v.deliberation}`} class="flex items-center gap-3 rounded-lg border border-gray-100 p-3 hover:bg-gray-50">
+              <span class={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${choixColor(v.choix)}`}>
+                {choixLabel(v.choix)}
+              </span>
+              <div class="min-w-0 flex-1">
+                {d && <span class="text-xs text-gray-400 mr-2">{d.numero}</span>}
+                <span class="text-sm">{d?.titre || `Délibération #${v.deliberation}`}</span>
+              </div>
+              {d && (
+                <span class={`shrink-0 text-xs font-medium ${aligned ? 'text-green-600' : 'text-orange-600'}`}>
+                  Conseil : {choixLabel(vc)}
+                  {aligned ? ' ✓' : ' ✗'}
+                </span>
+              )}
+            </a>
+          )
+        })}
+      </div>
+    )}
+  </section>
+
+  <!-- Paramètres -->
+  <section class="mb-10">
+    <h2 class="text-xl font-bold mb-4">Préférences</h2>
+    <form id="prefs-form" class="space-y-3 rounded-lg border border-gray-200 p-4">
+      <label class="flex items-start gap-3">
+        <input type="checkbox" id="notif_cm" name="notif_cm" checked={profile?.notif_cm} class="mt-1" />
+        <div>
+          <div class="font-medium">Recevoir un email avant chaque conseil municipal</div>
+          <div class="text-xs text-gray-500">Envoi 7 jours avant la séance avec l'ordre du jour</div>
+        </div>
+      </label>
+      <div class="flex items-center gap-3">
+        <button type="submit" class="rounded-lg bg-green-800 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">
+          Enregistrer
+        </button>
+        <span id="prefs-msg" class="text-sm text-green-700"></span>
+      </div>
+    </form>
+  </section>
+</Layout>
+
+<script>
+  const form = document.getElementById('prefs-form') as HTMLFormElement
+  const msg = document.getElementById('prefs-msg') as HTMLSpanElement
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const notif = (document.getElementById('notif_cm') as HTMLInputElement).checked
+    const resp = await fetch('/api/me/prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notif_cm: notif }),
+    })
+    msg.textContent = resp.ok ? 'Enregistré ✓' : 'Erreur'
+    setTimeout(() => { msg.textContent = '' }, 3000)
+  })
+</script>

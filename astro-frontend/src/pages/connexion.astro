@@ -1,70 +1,120 @@
 ---
+export const prerender = false
 import Layout from '../layouts/Layout.astro'
+import { getSessionCookie } from '../lib/auth'
+
+const user = getSessionCookie(Astro.cookies)
+if (user) return Astro.redirect('/mon-espace')
+
+const errors: Record<string, string> = {
+  missing_token: 'Lien invalide.',
+  invalid: 'Ce lien n\'existe pas ou a déjà été utilisé.',
+  used: 'Ce lien a déjà été utilisé. Demandez-en un nouveau.',
+  expired: 'Ce lien a expiré (valable 15 minutes). Demandez-en un nouveau.',
+  unknown: 'Une erreur est survenue. Réessayez.',
+}
+const errorCode = Astro.url.searchParams.get('error')
+const errorMsg = errorCode ? errors[errorCode] || 'Erreur inconnue' : ''
 ---
 
-<Layout title="Connexion — Plateforme Citoyenne">
+<Layout title="Connexion — Plateforme Citoyenne Lisloise">
   <div class="mx-auto max-w-md">
-    <h1 class="text-3xl font-bold mb-2">Participer</h1>
+    <h1 class="text-3xl font-bold mb-2">Me connecter</h1>
     <p class="text-gray-500 mb-8">
-      Entrez votre email pour voter, commenter et signer des petitions.
+      Entrez votre email. Si vous n'avez pas encore de compte, complétez les infos ci-dessous — sans mot de passe, juste un lien de connexion par email.
     </p>
-    <form id="login-form" class="space-y-4">
+
+    {errorMsg && (
+      <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{errorMsg}</div>
+    )}
+
+    <form id="auth-form" class="space-y-4">
       <div>
-        <label for="email" class="block text-sm font-medium mb-1">Email</label>
-        <input id="email" type="email" required
-          class="w-full rounded-lg border border-gray-300 px-4 py-3 text-lg focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+        <label for="email" class="block text-sm font-medium mb-1">Email *</label>
+        <input id="email" name="email" type="email" required autocomplete="email"
+          class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
           placeholder="votre@email.fr" />
       </div>
-      <div>
-        <label for="password" class="block text-sm font-medium mb-1">Mot de passe</label>
-        <input id="password" type="password" required
-          class="w-full rounded-lg border border-gray-300 px-4 py-3 text-lg focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
-          placeholder="••••••••" />
-      </div>
-      <div id="error" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2"></div>
-      <button type="submit"
+
+      <details id="signup-details" class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <summary class="cursor-pointer text-sm font-medium text-gray-700">
+          Je n'ai pas encore de compte
+        </summary>
+        <div class="mt-4 space-y-3">
+          <div>
+            <label for="pseudo" class="block text-sm font-medium mb-1">Pseudo (public) *</label>
+            <input id="pseudo" name="pseudo" type="text" minlength="2" autocomplete="username"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+              placeholder="Pierre_LIJ" />
+            <p class="mt-1 text-xs text-gray-500">Affiché à côté de vos votes et commentaires.</p>
+          </div>
+          <div>
+            <label for="prenom" class="block text-sm font-medium mb-1">Prénom (facultatif)</label>
+            <input id="prenom" name="prenom" type="text" autocomplete="given-name"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500" />
+          </div>
+          <label class="flex items-start gap-2 text-xs text-gray-600">
+            <input id="rgpd" name="rgpd_accepte" type="checkbox" class="mt-0.5" />
+            <span>J'accepte que mon email et mon pseudo soient stockés pour permettre la participation. Je peux demander la suppression de mon compte à tout moment (<a href="/mentions-legales" class="underline">mentions légales</a>).</span>
+          </label>
+        </div>
+      </details>
+
+      <div id="error" class="hidden rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600"></div>
+      <div id="success" class="hidden rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800"></div>
+
+      <button id="submit-btn" type="submit"
         class="w-full rounded-lg bg-green-800 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-50">
-        Se connecter
+        Recevoir mon lien de connexion
       </button>
+
       <p class="text-xs text-gray-400 text-center">
-        Pas encore de compte ? Contactez l'administration pour en creer un.
+        Pas de mot de passe. Vous recevez à chaque connexion un lien sécurisé par email (valable 15 minutes).
       </p>
     </form>
   </div>
 </Layout>
 
 <script>
-  const DIRECTUS_URL = 'http://localhost:8055'
-  const form = document.getElementById('login-form') as HTMLFormElement
-  const errorDiv = document.getElementById('error') as HTMLDivElement
+  const form = document.getElementById('auth-form') as HTMLFormElement
+  const errDiv = document.getElementById('error') as HTMLDivElement
+  const okDiv = document.getElementById('success') as HTMLDivElement
+  const btn = document.getElementById('submit-btn') as HTMLButtonElement
+  const signup = document.getElementById('signup-details') as HTMLDetailsElement
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault()
-    errorDiv.classList.add('hidden')
+    errDiv.classList.add('hidden'); okDiv.classList.add('hidden')
+    btn.disabled = true; btn.textContent = 'Envoi...'
 
-    const email = (document.getElementById('email') as HTMLInputElement).value
-    const password = (document.getElementById('password') as HTMLInputElement).value
-
+    const fd = new FormData(form)
     try {
-      const resp = await fetch(`${DIRECTUS_URL}/auth/login`, {
+      const resp = await fetch('/api/auth/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email: fd.get('email'),
+          pseudo: fd.get('pseudo'),
+          prenom: fd.get('prenom'),
+          rgpd_accepte: fd.get('rgpd_accepte') === 'on',
+        }),
       })
       const data = await resp.json()
-
       if (!resp.ok) {
-        errorDiv.textContent = data.errors?.[0]?.message || 'Identifiants incorrects'
-        errorDiv.classList.remove('hidden')
+        errDiv.textContent = data.error || 'Erreur'
+        errDiv.classList.remove('hidden')
+        btn.disabled = false; btn.textContent = 'Recevoir mon lien de connexion'
         return
       }
-
-      localStorage.setItem('directus_token', data.data.access_token)
-      localStorage.setItem('directus_refresh', data.data.refresh_token)
-      window.location.href = '/'
+      okDiv.innerHTML = (data.message || 'Email envoyé.') + (data.devLink ? `<br/><br/><strong>DEV</strong> : <a href="${data.devLink}" class="underline">Cliquer ici pour se connecter</a>` : '')
+      okDiv.classList.remove('hidden')
+      form.reset()
+      btn.disabled = false; btn.textContent = 'Recevoir mon lien de connexion'
+      signup.open = false
     } catch {
-      errorDiv.textContent = 'Erreur de connexion'
-      errorDiv.classList.remove('hidden')
+      errDiv.textContent = 'Erreur réseau'
+      errDiv.classList.remove('hidden')
+      btn.disabled = false; btn.textContent = 'Recevoir mon lien de connexion'
     }
   })
 </script>

@@ -1,45 +1,44 @@
 import { useState, useEffect } from 'react'
 
-const DIRECTUS_URL = 'http://localhost:8055'
+interface Props { deliberationId: number }
 
-interface Props {
-  deliberationId: number
-}
+type Choix = 'pour' | 'contre' | 'abstention'
 
 export default function VoteCitoyen({ deliberationId }: Props) {
   const [counts, setCounts] = useState({ pour: 0, contre: 0, abstention: 0 })
-  const [voted, setVoted] = useState(false)
+  const [myVote, setMyVote] = useState<Choix | null>(null)
+  const [authed, setAuthed] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState('')
 
-  useEffect(() => {
-    fetch(`${DIRECTUS_URL}/items/votes_citoyens?filter[deliberation][_eq]=${deliberationId}&aggregate[count]=choix&groupBy[]=choix`)
+  function refresh() {
+    fetch(`/api/vote?deliberation=${deliberationId}`)
       .then(r => r.json())
-      .then(data => {
-        const c = { pour: 0, contre: 0, abstention: 0 }
-        for (const row of data.data || []) {
-          if (row.choix in c) c[row.choix as keyof typeof c] = parseInt(row.count?.choix || '0')
-        }
-        setCounts(c)
-      })
-      .catch(() => {})
-  }, [deliberationId, voted])
+      .then(d => {
+        if (d.counts) setCounts(d.counts)
+        setMyVote(d.myVote || null)
+        setAuthed(!!d.authenticated)
+      }).catch(() => {})
+  }
+  useEffect(() => { refresh() }, [deliberationId])
 
-  async function vote(choix: string) {
-    setLoading(true)
-    // TODO: auth token from cookie
-    const token = localStorage.getItem('directus_token')
-    if (!token) {
-      alert('Connectez-vous pour voter')
-      setLoading(false)
+  async function vote(choix: Choix) {
+    if (!authed) {
+      window.location.href = `/connexion?next=${encodeURIComponent(window.location.pathname)}`
       return
     }
-    await fetch(`${DIRECTUS_URL}/items/votes_citoyens`, {
+    setLoading(true); setMsg('')
+    const resp = await fetch('/api/vote', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deliberation: deliberationId, choix }),
     })
-    setVoted(true)
     setLoading(false)
+    if (!resp.ok) { setMsg('Erreur'); return }
+    const d = await resp.json()
+    setMsg(d.updated ? 'Vote modifié ✓' : 'Vote enregistré ✓')
+    refresh()
+    setTimeout(() => setMsg(''), 3000)
   }
 
   const total = counts.pour + counts.contre + counts.abstention
@@ -47,27 +46,32 @@ export default function VoteCitoyen({ deliberationId }: Props) {
   return (
     <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 mt-6">
       <h3 className="text-sm font-semibold text-blue-800 mb-3">Vote citoyen</h3>
+      {!authed && (
+        <p className="text-xs text-blue-700 mb-3">
+          <a href={`/connexion?next=${typeof window !== 'undefined' ? encodeURIComponent(window.location.pathname) : ''}`} className="font-semibold underline">Connectez-vous</a> pour voter. Vous pourrez modifier votre vote à tout moment.
+        </p>
+      )}
       <div className="flex gap-2 mb-3">
         <button
           onClick={() => vote('pour')}
-          disabled={loading || voted}
-          className="flex-1 rounded-lg bg-green-600 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+          disabled={loading}
+          className={`flex-1 rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50 ${myVote === 'pour' ? 'bg-green-700 ring-2 ring-green-900' : 'bg-green-600 hover:bg-green-700'}`}
         >
-          Pour
+          Pour {myVote === 'pour' && '✓'}
         </button>
         <button
           onClick={() => vote('contre')}
-          disabled={loading || voted}
-          className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          disabled={loading}
+          className={`flex-1 rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50 ${myVote === 'contre' ? 'bg-red-700 ring-2 ring-red-900' : 'bg-red-600 hover:bg-red-700'}`}
         >
-          Contre
+          Contre {myVote === 'contre' && '✓'}
         </button>
         <button
           onClick={() => vote('abstention')}
-          disabled={loading || voted}
-          className="flex-1 rounded-lg bg-gray-400 py-2 text-sm font-semibold text-white hover:bg-gray-500 disabled:opacity-50"
+          disabled={loading}
+          className={`flex-1 rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50 ${myVote === 'abstention' ? 'bg-gray-600 ring-2 ring-gray-800' : 'bg-gray-400 hover:bg-gray-500'}`}
         >
-          Abstention
+          Abstention {myVote === 'abstention' && '✓'}
         </button>
       </div>
       {total > 0 && (
@@ -84,7 +88,7 @@ export default function VoteCitoyen({ deliberationId }: Props) {
           </div>
         </div>
       )}
-      {voted && <p className="text-xs text-green-700 mt-2">Vote enregistre !</p>}
+      {msg && <p className="text-xs text-green-700 mt-2">{msg}</p>}
     </div>
   )
 }

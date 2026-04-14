@@ -6,6 +6,9 @@ interface Props {
   title?: string
 }
 const { title = 'Plateforme Citoyenne Lisloise' } = Astro.props
+
+const plausibleDomain = import.meta.env.PLAUSIBLE_DOMAIN || ''
+const plausibleSrc = import.meta.env.PLAUSIBLE_SRC || 'https://plausible.io/js/script.js'
 ---
 
 <html lang="fr">
@@ -16,6 +19,9 @@ const { title = 'Plateforme Citoyenne Lisloise' } = Astro.props
     <meta name="description" content="Suivez les décisions du conseil municipal, votez, commentez, proposez." />
     <link rel="icon" href="/favicon.ico" />
     <title>{title}</title>
+    {plausibleDomain && (
+      <script is:inline defer data-domain={plausibleDomain} src={plausibleSrc}></script>
+    )}
   </head>
   <body class="min-h-screen bg-white text-gray-900 antialiased">
     <header class="border-b border-gray-200 bg-white">
@@ -24,13 +30,11 @@ const { title = 'Plateforme Citoyenne Lisloise' } = Astro.props
           Plateforme Citoyenne Lisloise
         </a>
         <div class="flex items-center gap-6 text-sm font-medium">
-          <a href="/seances" class="hover:text-green-700">Prochains conseils</a>
+          <a href="/seances" class="hover:text-green-700">Séances</a>
           <a href="/deliberations" class="hover:text-green-700">Délibérations</a>
           <a href="/elus" class="hover:text-green-700">Élus</a>
-          <a href="/signalements" class="hover:text-green-700">Signalements</a>
-          <a href="/petitions" class="hover:text-green-700">Pétitions</a>
-          <a href="/engagements" class="hover:text-green-700">Engagements</a>
-          <a href="/newsletter" class="hover:text-green-700">Newsletter</a>
+          <a href="/engagements" class="hover:text-green-700">Programme</a>
+          <a href="/blog" class="hover:text-green-700">Blog</a>
           <HeaderMenu client:load />
         </div>
       </nav>
