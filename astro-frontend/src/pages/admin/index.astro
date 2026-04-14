@@ -1,0 +1,217 @@
+---
+export const prerender = false
+import Layout from '../../layouts/Layout.astro'
+import { getSessionCookie, isModerator, isAdmin, directusAdmin } from '../../lib/auth'
+
+const me = getSessionCookie(Astro.cookies)
+if (!me || !isModerator(me)) return Astro.redirect('/connexion')
+
+const tab = Astro.url.searchParams.get('tab') || 'commentaires'
+
+// === COMPTES (admin uniquement) ===
+let comptes: any[] = []
+if (isAdmin(me) && tab === 'comptes') {
+  const r = await directusAdmin('GET', '/items/citoyens?sort=-created_at&limit=200&fields=id,email,pseudo,prenom,role,confirmed,notif_cm,created_at')
+  comptes = r.data || []
+}
+
+// === COMMENTAIRES (mod + admin) ===
+let commentaires: any[] = []
+if (tab === 'commentaires') {
+  const r = await directusAdmin('GET', '/items/commentaires?sort=-id&limit=200&fields=id,type,contenu,modere,deliberation,auteur')
+  commentaires = r.data || []
+  const ids = [...new Set(commentaires.map((c: any) => c.auteur).filter(Boolean))]
+  if (ids.length) {
+    const csv = ids.map((i: string) => `"${i}"`).join(',')
+    const a = await directusAdmin('GET', `/items/citoyens?filter[id][_in]=[${csv}]&limit=200&fields=id,pseudo,role`)
+    const map: Record<string, any> = {}
+    for (const x of a.data || []) map[x.id] = x
+    commentaires = commentaires.map((c: any) => ({ ...c, _auteur: map[c.auteur] }))
+  }
+  // Délibs concernées
+  const delibIds = [...new Set(commentaires.map((c: any) => c.deliberation).filter(Boolean))]
+  if (delibIds.length) {
+    const dResp = await directusAdmin('GET', `/items/deliberations?filter[id][_in]=${delibIds.join(',')}&limit=500&fields=id,numero,titre`)
+    const dMap: Record<number, any> = {}
+    for (const d of dResp.data || []) dMap[d.id] = d
+    commentaires = commentaires.map((c: any) => ({ ...c, _delib: dMap[c.deliberation] }))
+  }
+}
+
+const typeLabels: Record<string, string> = {
+  argument_pour: '👍 Favorable',
+  argument_contre: '👎 Défavorable',
+  question: '❓ Question',
+  proposition_alternative: '💡 Suggestion',
+}
+const typeColors: Record<string, string> = {
+  argument_pour: 'bg-green-100 text-green-700',
+  argument_contre: 'bg-red-100 text-red-700',
+  question: 'bg-blue-100 text-blue-700',
+  proposition_alternative: 'bg-purple-100 text-purple-700',
+}
+const roleLabels: Record<string, string> = {
+  citoyen: 'Citoyen', moderateur: 'Modérateur', admin: 'Administrateur',
+}
+const roleColors: Record<string, string> = {
+  citoyen: 'bg-gray-100 text-gray-600', moderateur: 'bg-blue-100 text-blue-700', admin: 'bg-purple-100 text-purple-700',
+}
+---
+
+<Layout title="Administration — Plateforme Citoyenne Lisloise">
+  <div class="mb-6 flex items-baseline justify-between">
+    <h1 class="text-3xl font-bold">Administration</h1>
+    <span class="text-sm text-gray-500">{me.pseudo} ({roleLabels[me.role || 'citoyen']})</span>
+  </div>
+
+  <!-- Tabs -->
+  <div class="mb-6 flex gap-2 border-b border-gray-200">
+    <a href="/admin?tab=commentaires" class={`px-4 py-2 text-sm font-medium border-b-2 ${tab === 'commentaires' ? 'border-green-700 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+      Commentaires ({commentaires.length})
+    </a>
+    {isAdmin(me) && (
+      <a href="/admin?tab=comptes" class={`px-4 py-2 text-sm font-medium border-b-2 ${tab === 'comptes' ? 'border-green-700 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+        Comptes ({comptes.length})
+      </a>
+    )}
+  </div>
+
+  {tab === 'commentaires' && (
+    <div class="space-y-3">
+      {commentaires.length === 0 && <p class="text-sm text-gray-500">Aucun commentaire.</p>}
+      {commentaires.map((c: any) => (
+        <div class={`rounded-lg border p-4 ${c.modere ? 'border-red-200 bg-red-50/30 opacity-60' : 'border-gray-200'}`}>
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap mb-1 text-xs">
+                <span class={`rounded-full px-2 py-0.5 font-medium ${typeColors[c.type]}`}>{typeLabels[c.type]}</span>
+                {c._auteur && <span class="font-semibold text-gray-700">{c._auteur.pseudo}</span>}
+                {c._auteur?.role && c._auteur.role !== 'citoyen' && (
+                  <span class={`rounded-full px-2 py-0.5 ${roleColors[c._auteur.role]}`}>{roleLabels[c._auteur.role]}</span>
+                )}
+                {c._delib && <a href={`/deliberations/${c._delib.id}`} class="text-gray-400 hover:text-green-700">↗ {c._delib.numero || c._delib.titre?.substring(0, 40)}</a>}
+                {c.modere && <span class="rounded-full bg-red-200 px-2 py-0.5 text-red-900 font-semibold">Modéré</span>}
+              </div>
+              <p class="text-sm whitespace-pre-line">{c.contenu}</p>
+            </div>
+            <div class="shrink-0 flex flex-col gap-1">
+              {!c.modere ? (
+                <button type="button" data-act="moderate" data-id={c.id} class="rounded-lg bg-orange-100 px-3 py-1 text-xs font-medium text-orange-800 hover:bg-orange-200">Masquer</button>
+              ) : (
+                <button type="button" data-act="restore" data-id={c.id} class="rounded-lg bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200">Restaurer</button>
+              )}
+              <button type="button" data-act="delete" data-id={c.id} class="rounded-lg bg-red-100 px-3 py-1 text-xs font-medium text-red-800 hover:bg-red-200">Supprimer</button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+
+  {tab === 'comptes' && isAdmin(me) && (
+    <div class="overflow-x-auto rounded-lg border border-gray-200">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
+          <tr>
+            <th class="px-4 py-2">Pseudo</th>
+            <th class="px-4 py-2">Email</th>
+            <th class="px-4 py-2">Rôle</th>
+            <th class="px-4 py-2">Notif CM</th>
+            <th class="px-4 py-2">Inscription</th>
+            <th class="px-4 py-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {comptes.map((u: any) => (
+            <tr class="border-t border-gray-100">
+              <td class="px-4 py-2 font-medium">{u.pseudo}</td>
+              <td class="px-4 py-2 text-gray-600">{u.email}</td>
+              <td class="px-4 py-2">
+                <span class={`rounded-full px-2 py-0.5 text-xs ${roleColors[u.role || 'citoyen']}`}>{roleLabels[u.role || 'citoyen']}</span>
+              </td>
+              <td class="px-4 py-2">{u.notif_cm ? '✓' : '—'}</td>
+              <td class="px-4 py-2 text-xs text-gray-400">{u.created_at ? new Date(u.created_at).toLocaleDateString('fr-FR') : ''}</td>
+              <td class="px-4 py-2 flex items-center gap-2">
+                <select data-uid={u.id} class="role-select rounded-lg border border-gray-300 px-2 py-1 text-xs">
+                  <option value="citoyen" selected={u.role === 'citoyen'}>Citoyen</option>
+                  <option value="moderateur" selected={u.role === 'moderateur'}>Modérateur</option>
+                  <option value="admin" selected={u.role === 'admin'}>Admin</option>
+                </select>
+                {u.id !== me.sub && (
+                  <button type="button" data-del-uid={u.id} data-pseudo={u.pseudo} class="rounded-lg bg-red-100 px-2 py-1 text-xs font-medium text-red-800 hover:bg-red-200">
+                    Supprimer
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+
+  <p class="mt-8 text-xs text-gray-400">Espace réservé aux modérateurs et administrateurs.</p>
+</Layout>
+
+<script>
+  // Modération des commentaires
+  document.querySelectorAll('button[data-act]').forEach(b => {
+    b.addEventListener('click', async (e) => {
+      const t = e.currentTarget as HTMLButtonElement
+      const act = t.dataset.act!
+      const id = t.dataset.id!
+      const verbe = act === 'delete' ? 'supprimer' : act === 'moderate' ? 'masquer' : 'restaurer'
+      if (act === 'delete' && !confirm('Supprimer définitivement ce commentaire ?')) return
+      t.disabled = true
+      const resp = await fetch(`/api/admin/moderate-comment`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: act }),
+      })
+      if (resp.ok) window.location.reload()
+      else { alert(`Échec : ${verbe}`); t.disabled = false }
+    })
+  })
+
+  // Changement de rôle
+  document.querySelectorAll('.role-select').forEach(s => {
+    s.addEventListener('change', async (e) => {
+      const t = e.currentTarget as HTMLSelectElement
+      const uid = t.dataset.uid!
+      const role = t.value
+      const resp = await fetch('/api/admin/set-role', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid, role }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        alert('Échec : ' + (err.error || 'inconnu'))
+      }
+    })
+  })
+
+  // Suppression de compte avec preview
+  document.querySelectorAll('button[data-del-uid]').forEach(b => {
+    b.addEventListener('click', async (e) => {
+      const t = e.currentTarget as HTMLButtonElement
+      const uid = t.dataset.delUid!
+      const pseudo = t.dataset.pseudo!
+      // Preview
+      const preview = await fetch(`/api/admin/delete-account?uid=${uid}`).then(r => r.json())
+      const msg = `Supprimer définitivement le compte de ${pseudo} (${preview.email}) ?\n\n` +
+        `Seront détruits :\n` +
+        `  • ${preview.commentaires} commentaire(s)\n` +
+        `  • ${preview.votes} vote(s) citoyen(s)\n` +
+        `  • Tous les pouces 👍👎 associés\n` +
+        `  • Tous les magic-tokens en cours\n\n` +
+        `Cette action est IRRÉVERSIBLE.`
+      if (!confirm(msg)) return
+      t.disabled = true
+      const resp = await fetch('/api/admin/delete-account', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid }),
+      })
+      if (resp.ok) window.location.reload()
+      else { alert('Échec suppression'); t.disabled = false }
+    })
+  })
+</script>

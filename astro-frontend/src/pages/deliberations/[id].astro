@@ -4,17 +4,24 @@ export const prerender = false
 import Layout from '../../layouts/Layout.astro'
 import VoteCitoyen from '../../components/VoteCitoyen.tsx'
 import { fetchItem, fetchItems } from '../../lib/directus'
+import { getSessionCookie, directusAdmin } from '../../lib/auth'
 
 const { id } = Astro.params
 const d = await fetchItem('deliberations', id!, { 'fields': '*,seance.*,theme.*' })
 if (!d) return Astro.redirect('/deliberations')
 
-const commentaires = await fetchItems('commentaires', {
-  'filter[deliberation][_eq]': String(id),
-  'filter[modere][_eq]': 'false',
-  sort: '-id',
-  limit: '50',
-})
+const me = getSessionCookie(Astro.cookies)
+
+// Charger les commentaires + résoudre les pseudos des auteurs (admin token)
+const commResp = await directusAdmin('GET', `/items/commentaires?filter[deliberation][_eq]=${id}&filter[modere][_eq]=false&sort=-id&limit=100&fields=id,type,contenu,auteur`)
+const commentaires = commResp.data || []
+const authorIds = [...new Set(commentaires.map((c: any) => c.auteur).filter(Boolean))]
+const pseudoMap: Record<string, string> = {}
+if (authorIds.length > 0) {
+  const idsCsv = authorIds.map((id: string) => `"${id}"`).join(',')
+  const aResp = await directusAdmin('GET', `/items/citoyens?filter[id][_in]=[${idsCsv}]&limit=200&fields=id,pseudo`)
+  for (const a of aResp.data || []) pseudoMap[a.id] = a.pseudo
+}
 ---
 
 <Layout title={`${d.titre} — Délibérations`}>
@@ -110,27 +117,141 @@ const commentaires = await fetchItems('commentaires', {
 
   <!-- Commentaires -->
   <div class="mt-8">
-    <h2 class="text-lg font-bold mb-4">Commentaires ({commentaires.length})</h2>
+    <h2 class="text-lg font-bold mb-4">Commentaires citoyens ({commentaires.length})</h2>
+
+    {me ? (
+      <form id="comm-form" class="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+        <div class="flex items-center gap-2 text-sm">
+          <span class="text-gray-500">Vous postez en tant que</span>
+          <span class="font-semibold text-green-800">{me.pseudo}</span>
+        </div>
+        <div>
+          <label for="ctype" class="block text-xs font-medium text-gray-600 mb-1">Nature de mon intervention</label>
+          <select id="ctype" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+            <option value="argument_pour">👍 Favorable</option>
+            <option value="argument_contre">👎 Défavorable</option>
+            <option value="question">❓ Question / demande d'info</option>
+            <option value="proposition_alternative">💡 Suggestion / proposition</option>
+          </select>
+        </div>
+        <div>
+          <label for="ccontenu" class="block text-xs font-medium text-gray-600 mb-1">Votre commentaire</label>
+          <textarea id="ccontenu" required rows="3" minlength="5" maxlength="2000"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Argumentez, posez une question, proposez une alternative..."></textarea>
+          <p class="mt-1 text-xs text-gray-400"><span id="char-count">0</span>/2000 caractères</p>
+        </div>
+        <div id="comm-err" class="hidden text-sm text-red-600"></div>
+        <button type="submit" class="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-50">
+          Publier
+        </button>
+      </form>
+    ) : (
+      <p class="mb-6 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+        <a href={`/connexion?next=/deliberations/${d.id}`} class="font-semibold text-green-700 underline">Connectez-vous</a> pour commenter cette délibération.
+      </p>
+    )}
+
     {commentaires.length === 0 ? (
       <p class="text-sm text-gray-500">Aucun commentaire pour le moment.</p>
     ) : (
       <div class="space-y-3">
         {commentaires.map((c: any) => (
-          <div class="rounded-lg border border-gray-100 p-3">
-            <span class={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-              c.type === 'argument_pour' ? 'bg-green-100 text-green-700' :
-              c.type === 'argument_contre' ? 'bg-red-100 text-red-700' :
-              c.type === 'question' ? 'bg-blue-100 text-blue-700' :
-              'bg-purple-100 text-purple-700'
-            }`}>
-              {c.type === 'argument_pour' ? 'Pour' :
-               c.type === 'argument_contre' ? 'Contre' :
-               c.type === 'question' ? 'Question' : 'Proposition'}
-            </span>
-            <p class="text-sm mt-1">{c.contenu}</p>
+          <div class="rounded-lg border border-gray-100 p-3" data-comment-id={c.id}>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-800">
+                {(pseudoMap[c.auteur] || '?')[0].toUpperCase()}
+              </span>
+              <span class="text-sm font-semibold text-gray-800">{pseudoMap[c.auteur] || 'Anonyme'}</span>
+              <span class={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                c.type === 'argument_pour' ? 'bg-green-100 text-green-700' :
+                c.type === 'argument_contre' ? 'bg-red-100 text-red-700' :
+                c.type === 'question' ? 'bg-blue-100 text-blue-700' :
+                'bg-purple-100 text-purple-700'
+              }`}>
+                {c.type === 'argument_pour' ? '👍 Favorable' :
+                 c.type === 'argument_contre' ? '👎 Défavorable' :
+                 c.type === 'question' ? '❓ Question' : '💡 Suggestion'}
+              </span>
+            </div>
+            <p class="text-sm whitespace-pre-line ml-9">{c.contenu}</p>
+            <div class="ml-9 mt-2 flex gap-2">
+              <button type="button" data-vote="1" data-cid={c.id} class="vote-btn flex items-center gap-1 rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-600 hover:bg-green-50 hover:border-green-300">
+                <span>👍</span><span class="vote-up-count">0</span>
+              </button>
+              <button type="button" data-vote="-1" data-cid={c.id} class="vote-btn flex items-center gap-1 rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-600 hover:bg-red-50 hover:border-red-300">
+                <span>👎</span><span class="vote-down-count">0</span>
+              </button>
+            </div>
           </div>
         ))}
       </div>
     )}
   </div>
+
+  <script>
+    const cIds = [...document.querySelectorAll('[data-comment-id]')].map(el => (el as HTMLElement).dataset.commentId).join(',')
+    if (cIds) {
+      const updateUI = (counts: any, mine: any) => {
+        document.querySelectorAll('[data-comment-id]').forEach(el => {
+          const id = Number((el as HTMLElement).dataset.commentId)
+          const c = counts[id] || { up: 0, down: 0 }
+          el.querySelector('.vote-up-count')!.textContent = String(c.up)
+          el.querySelector('.vote-down-count')!.textContent = String(c.down)
+          const myV = mine[id]
+          el.querySelectorAll('.vote-btn').forEach(b => {
+            const v = Number((b as HTMLButtonElement).dataset.vote)
+            b.classList.toggle('!bg-green-100', myV === 1 && v === 1)
+            b.classList.toggle('!border-green-500', myV === 1 && v === 1)
+            b.classList.toggle('!bg-red-100', myV === -1 && v === -1)
+            b.classList.toggle('!border-red-500', myV === -1 && v === -1)
+          })
+        })
+      }
+      const refresh = () => fetch(`/api/comment-vote?ids=${cIds}`).then(r => r.json()).then(d => updateUI(d.counts, d.mine))
+      refresh()
+      document.querySelectorAll('.vote-btn').forEach(b => {
+        b.addEventListener('click', async (e) => {
+          const t = e.currentTarget as HTMLButtonElement
+          const cid = Number(t.dataset.cid)
+          const v = Number(t.dataset.vote)
+          const resp = await fetch('/api/comment-vote', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ commentaire: cid, value: v }),
+          })
+          if (resp.status === 401) { window.location.href = '/connexion?next=' + window.location.pathname; return }
+          if (resp.ok) refresh()
+        })
+      })
+    }
+  </script>
+
+  <script define:vars={{ delibId: d.id }}>
+    const form = document.getElementById('comm-form')
+    if (form) {
+      const contenu = document.getElementById('ccontenu')
+      const counter = document.getElementById('char-count')
+      contenu.addEventListener('input', () => { counter.textContent = String(contenu.value.length) })
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault()
+        const err = document.getElementById('comm-err')
+        err.classList.add('hidden')
+        const type = document.getElementById('ctype').value
+        const txt = contenu.value.trim()
+        if (txt.length < 5) { err.textContent = '5 caractères minimum'; err.classList.remove('hidden'); return }
+        const resp = await fetch('/api/comment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deliberation: delibId, type, contenu: txt }),
+        })
+        const data = await resp.json()
+        if (!resp.ok) {
+          err.textContent = data.error || 'Erreur'
+          err.classList.remove('hidden')
+          return
+        }
+        window.location.reload()
+      })
+    }
+  </script>
 </Layout>

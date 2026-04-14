@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-interface MeResponse { user: { sub: string; email: string; pseudo: string } | null }
+interface MeResponse { user: { sub: string; email: string; pseudo: string; role?: string } | null }
 
 export default function HeaderMenu() {
   const [user, setUser] = useState<MeResponse['user']>(null)
@@ -37,8 +37,13 @@ export default function HeaderMenu() {
         {user.pseudo}
       </button>
       {menuOpen && (
-        <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg z-50">
+        <div className="absolute right-0 top-full mt-1 w-52 rounded-lg border border-gray-200 bg-white py-1 shadow-lg z-50">
           <a href="/mon-espace" className="block px-3 py-2 text-sm hover:bg-gray-50">Mon espace</a>
+          {(user.role === 'moderateur' || user.role === 'admin') && (
+            <a href="/admin" className="block px-3 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50">
+              {user.role === 'admin' ? '⚙ Administration' : '⚙ Modération'}
+            </a>
+          )}
           <form action="/api/auth/logout" method="POST" className="border-t border-gray-100">
             <button type="submit" className="block w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
               Se déconnecter

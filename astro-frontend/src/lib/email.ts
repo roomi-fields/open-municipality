@@ -1,9 +1,9 @@
 /**
  * Envoi d'emails via Brevo (transactional API).
  */
-const BREVO_API_KEY = import.meta.env.BREVO_API_KEY
+const BREVO_API_KEY = process.env.BREVO_API_KEY || import.meta.env.BREVO_API_KEY
 const EMAIL_FROM_NAME = 'Plateforme Citoyenne Lisloise'
-const EMAIL_FROM = import.meta.env.EMAIL_FROM_ADDR || 'notifications@plateformecitoyennelisloise.fr'
+const EMAIL_FROM = process.env.EMAIL_FROM_ADDR || import.meta.env.EMAIL_FROM_ADDR || 'notifications@plateformecitoyennelisloise.fr'
 
 export async function sendMail(to: string, subject: string, html: string, text?: string): Promise<boolean> {
   console.log(`[mail] to=${to} key=${BREVO_API_KEY ? 'set('+BREVO_API_KEY.substring(0,8)+'...)' : 'MISSING'} from=${EMAIL_FROM}`)

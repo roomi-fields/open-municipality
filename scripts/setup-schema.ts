@@ -4,18 +4,37 @@
  */
 
 const DIRECTUS_URL = process.env.DIRECTUS_URL || 'http://localhost:8055'
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'directus-admin-token-dev'
+let TOKEN = process.env.ADMIN_TOKEN || ''
+
+async function login() {
+  const email = process.env.ADMIN_EMAIL || 'admin@plateforme-citoyenne.fr'
+  const password = process.env.ADMIN_PASSWORD || 'admin'
+  const resp = await fetch(`${DIRECTUS_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  const data = await resp.json()
+  if (!data.data?.access_token) throw new Error('Login Directus échoué : ' + JSON.stringify(data))
+  TOKEN = data.data.access_token
+}
 
 async function api(method: string, endpoint: string, body?: any) {
+  if (!TOKEN) await login()
   const opts: RequestInit = {
     method,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${ADMIN_TOKEN}`,
+      'Authorization': `Bearer ${TOKEN}`,
     },
   }
   if (body) opts.body = JSON.stringify(body)
-  const resp = await fetch(`${DIRECTUS_URL}${endpoint}`, opts)
+  let resp = await fetch(`${DIRECTUS_URL}${endpoint}`, opts)
+  if (resp.status === 401 || resp.status === 403) {
+    await login()
+    ;(opts.headers as any).Authorization = `Bearer ${TOKEN}`
+    resp = await fetch(`${DIRECTUS_URL}${endpoint}`, opts)
+  }
   const data = await resp.json()
   if (!resp.ok) {
     // Ignore "already exists" errors

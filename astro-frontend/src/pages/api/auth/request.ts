@@ -22,15 +22,24 @@ export const POST: APIRoute = async ({ request, url }) => {
   // Si nouvelle inscription : pseudo obligatoire + rgpd accepté
   if (!citoyen) {
     if (!pseudo || pseudo.length < 2) {
-      return new Response(JSON.stringify({ error: 'Pseudo requis (min 2 caractères)' }), { status: 400 })
+      return new Response(JSON.stringify({
+        error_code: 'needs_signup',
+        error: "Cet email n'est pas encore enregistré. Pour créer votre compte, entrez un pseudo (visible à côté de vos votes) et acceptez les conditions ci-dessous.",
+      }), { status: 400 })
     }
     if (!rgpd) {
-      return new Response(JSON.stringify({ error: 'Vous devez accepter les conditions RGPD' }), { status: 400 })
+      return new Response(JSON.stringify({
+        error_code: 'needs_rgpd',
+        error: 'Pour créer votre compte, vous devez accepter les conditions de stockage de vos données.',
+      }), { status: 400 })
     }
     // Vérifier unicité du pseudo
     const pseudoCheck = await directusAdmin('GET', `/items/citoyens?filter[pseudo][_eq]=${encodeURIComponent(pseudo)}&limit=1`)
     if (pseudoCheck.data?.length) {
-      return new Response(JSON.stringify({ error: 'Ce pseudo est déjà utilisé' }), { status: 409 })
+      return new Response(JSON.stringify({
+        error_code: 'pseudo_taken',
+        error: 'Ce pseudo est déjà utilisé. Choisissez-en un autre.',
+      }), { status: 409 })
     }
   }
 
@@ -46,8 +55,9 @@ export const POST: APIRoute = async ({ request, url }) => {
     used: false,
   })
 
-  // Construire le lien
-  const origin = new URL(request.url).origin
+  // Construire le lien — en prod derrière un reverse proxy, request.url pointe vers
+  // localhost. On utilise SITE_URL si disponible.
+  const origin = process.env.SITE_URL || new URL(request.url).origin
   const link = `${origin}/api/auth/verify?token=${token}`
 
   const { subject, html } = magicLinkEmail(link, citoyen?.pseudo || pseudo)

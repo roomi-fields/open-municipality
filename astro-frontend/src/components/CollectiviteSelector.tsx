@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
-const DIRECTUS_URL = 'http://localhost:8055'
+// PUBLIC_DIRECTUS_URL est exposé au navigateur (préfixe PUBLIC_ requis par Astro)
+const DIRECTUS_URL = import.meta.env.PUBLIC_DIRECTUS_URL || 'http://localhost:8055'
 
 interface Collectivite {
   id: number

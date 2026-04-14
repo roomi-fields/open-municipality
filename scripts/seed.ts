@@ -7,12 +7,15 @@ const DIRECTUS_URL = process.env.DIRECTUS_URL || 'http://localhost:8055'
 let TOKEN = ''
 
 async function login() {
+  const email = process.env.ADMIN_EMAIL || 'admin@plateforme-citoyenne.fr'
+  const password = process.env.ADMIN_PASSWORD || 'admin'
   const resp = await fetch(`${DIRECTUS_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'admin@plateforme-citoyenne.fr', password: 'admin' }),
+    body: JSON.stringify({ email, password }),
   })
   const data = await resp.json()
+  if (!data.data?.access_token) throw new Error('Login failed: ' + JSON.stringify(data))
   TOKEN = data.data.access_token
 }
 

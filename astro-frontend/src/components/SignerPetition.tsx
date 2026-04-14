@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const DIRECTUS_URL = 'http://localhost:8055'
+const DIRECTUS_URL = import.meta.env.PUBLIC_DIRECTUS_URL || 'http://localhost:8055'
 
 interface Props {
   petitionId: number

@@ -61,7 +61,12 @@ services:
       - directus_extensions:/directus/extensions
 
   frontend:
-    build: ./astro-frontend
+    build:
+      context: ./astro-frontend
+      args:
+        # PUBLIC_DIRECTUS_URL doit être présent au BUILD pour être inliné dans
+        # les composants React (côté navigateur). Voir Dockerfile.
+        PUBLIC_DIRECTUS_URL: ${PUBLIC_DIRECTUS_URL}
     restart: unless-stopped
     depends_on:
       - directus
@@ -70,6 +75,8 @@ services:
     environment:
       # Depuis le container Astro, on tape directement le service directus
       DIRECTUS_URL: http://directus:8055
+      # URL publique de Directus exposée au navigateur
+      PUBLIC_DIRECTUS_URL: ${PUBLIC_DIRECTUS_URL}
       # Email admin pour auth Directus depuis Astro (endpoints API)
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}

@@ -8,10 +8,10 @@
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 
-const DIRECTUS_URL = import.meta.env.DIRECTUS_URL || 'http://localhost:8055'
-const ADMIN_EMAIL = import.meta.env.ADMIN_EMAIL || 'admin@plateforme-citoyenne.fr'
-const ADMIN_PASSWORD = import.meta.env.ADMIN_PASSWORD || 'admin'
-const JWT_SECRET = import.meta.env.JWT_SECRET || import.meta.env.DIRECTUS_SECRET || 'dev-secret'
+const DIRECTUS_URL = process.env.DIRECTUS_URL || import.meta.env.DIRECTUS_URL || 'http://localhost:8055'
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || import.meta.env.ADMIN_EMAIL || 'admin@plateforme-citoyenne.fr'
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || import.meta.env.ADMIN_PASSWORD || 'admin'
+const JWT_SECRET = process.env.JWT_SECRET || import.meta.env.JWT_SECRET || process.env.DIRECTUS_SECRET || 'dev-secret'
 const SESSION_COOKIE = 'pcl_session'
 const SESSION_TTL_DAYS = 30
 const MAGIC_TTL_MIN = 15
@@ -50,6 +50,14 @@ export interface SessionPayload {
   sub: string // citoyen uuid
   email: string
   pseudo: string
+  role?: 'citoyen' | 'moderateur' | 'admin'
+}
+
+export function isModerator(s: SessionPayload | null): boolean {
+  return !!s && (s.role === 'moderateur' || s.role === 'admin')
+}
+export function isAdmin(s: SessionPayload | null): boolean {
+  return !!s && s.role === 'admin'
 }
 
 export function signSession(payload: SessionPayload): string {

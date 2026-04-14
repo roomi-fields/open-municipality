@@ -44,6 +44,7 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
     sub: citoyen.id,
     email: citoyen.email,
     pseudo: citoyen.pseudo,
+    role: citoyen.role || 'citoyen',
   })
 
   return redirect('/mon-espace?welcome=1')
