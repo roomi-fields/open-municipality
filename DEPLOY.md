@@ -141,11 +141,20 @@ Une fois validé, changer `EMAIL_FROM_ADDR` dans `.env.prod` vers une adresse du
 
 ## Mises à jour
 
+Voir aussi `HOWTO-DEPLOY.md` pour la procédure idiot-proof avec `REDEPLOY.sh` (dump local → restore prod + rebuild). Quelques points à ne pas oublier :
+
+### Avant de lancer `REDEPLOY.sh`
+
+1. **Commit + push** tes modifs locales sur `origin/main` — le script fait `git reset --hard origin/main`, donc tout ce qui n'est pas poussé sera ignoré (et tout fichier modifié à la main sur le VPS et tracké en git sera écrasé).
+2. **Hotfixes appliqués à chaud sur le VPS** (édition directe d'un fichier tracké) : remonte-les en git avant le redéploiement, sinon ils sont perdus. Les fichiers **non trackés** (`.env.prod`, `docker-compose.override.yml`) sont préservés.
+3. **`PUBLIC_DIRECTUS_URL`** doit être renseigné dans `.env.prod` (et `astro-frontend/Dockerfile` doit l'exposer en `ARG`/`ENV` au stage de build, sinon le SDK Directus retombe sur `http://localhost:8055` → contenu mixte → cadenas rouge sur HTTPS).
+
+### Mise à jour code seulement (sans toucher à la DB)
+
 ```bash
 cd /opt/open-municipality
 git pull
-cd v2
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+docker compose -f docker-compose.prod.yml -f docker-compose.override.yml --env-file .env.prod up -d --build frontend
 ```
 
 ## Sauvegarde
