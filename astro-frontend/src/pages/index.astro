@@ -16,10 +16,10 @@ const prochainesSeances = await fetchItems('seances', {
 const prochainCM = prochainesSeances.find((s: any) => s.type === 'conseil_municipal') || null
 const ojCount = Array.isArray(prochainCM?.ordre_jour_items) ? prochainCM.ordre_jour_items.length : 0
 
-// Dernières délibérations (toutes collectivités)
+// Dernières délibérations (toutes collectivités) — triées par date de séance descendante
 const deliberations = await fetchItems('deliberations', {
   'filter[statut][_eq]': 'publie',
-  sort: '-id',
+  sort: '-seance.date,-id',
   limit: '4',
   fields: 'id,numero,titre,resume_ia,vote_pour,vote_contre,vote_abstention,budget_montant,seance.date,seance.type',
 })

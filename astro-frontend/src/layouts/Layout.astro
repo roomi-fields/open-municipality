@@ -30,10 +30,28 @@ const plausibleSrc = import.meta.env.PLAUSIBLE_SRC || 'https://plausible.io/js/s
           Plateforme Citoyenne Lisloise
         </a>
         <div class="flex items-center gap-6 text-sm font-medium">
-          <a href="/seances" class="hover:text-green-700">Séances</a>
-          <a href="/deliberations" class="hover:text-green-700">Délibérations</a>
-          <a href="/elus" class="hover:text-green-700">Élus</a>
-          <a href="/engagements" class="hover:text-green-700">Programme</a>
+          <div class="group relative">
+            <button
+              type="button"
+              class="flex items-center gap-1 hover:text-green-700 focus:outline-none focus:text-green-700"
+              aria-haspopup="true"
+              aria-expanded="false"
+            >
+              Les conseils
+              <svg class="h-3 w-3" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                <path d="M2 4l4 4 4-4z" />
+              </svg>
+            </button>
+            <div
+              class="invisible absolute left-0 top-full z-20 mt-1 w-56 rounded-md border border-gray-200 bg-white py-2 opacity-0 shadow-lg transition-[opacity,visibility] duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+              role="menu"
+            >
+              <a href="/seances" class="block px-4 py-2 hover:bg-green-50 hover:text-green-700" role="menuitem">Séances</a>
+              <a href="/deliberations" class="block px-4 py-2 hover:bg-green-50 hover:text-green-700" role="menuitem">Délibérations</a>
+              <a href="/elus" class="block px-4 py-2 hover:bg-green-50 hover:text-green-700" role="menuitem">Élus</a>
+              <a href="/engagements" class="block px-4 py-2 hover:bg-green-50 hover:text-green-700" role="menuitem">Programme</a>
+            </div>
+          </div>
           <a href="/blog" class="hover:text-green-700">Blog</a>
           <HeaderMenu client:load />
         </div>
