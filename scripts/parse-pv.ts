@@ -19,6 +19,7 @@ export interface ParsedPV {
     lieu: string
     type?: string // conseil_municipal | conseil_communautaire
     codeInsee?: string
+    source?: 'pdf_officiel' | 'transcription_audio'
   }
   conseillers: {
     nom: string

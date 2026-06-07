@@ -3,8 +3,12 @@ import Layout from '../layouts/Layout.astro'
 import { fetchItems } from '../lib/directus'
 
 // Prochaines séances (CM + CCGT)
+// Garde-fou : on filtre aussi par date >= aujourd'hui pour éviter d'afficher une séance
+// dont le statut "a_venir" n'aurait pas été mis à jour après son passage.
+const todayIso = new Date().toISOString().slice(0, 10)
 const prochainesSeances = await fetchItems('seances', {
   'filter[statut][_eq]': 'a_venir',
+  'filter[date][_gte]': todayIso,
   sort: 'date',
   limit: '2',
   fields: 'id,date,type,lieu,collectivite,ordre_jour_items',
@@ -20,13 +24,15 @@ const deliberations = await fetchItems('deliberations', {
   fields: 'id,numero,titre,resume_ia,vote_pour,vote_contre,vote_abstention,budget_montant,seance.date,seance.type',
 })
 
-// Derniers articles de blog
+// Derniers articles de blog (1 mis en avant + 3 en grille)
 const derniersArticles = await fetchItems('articles', {
   'filter[statut][_eq]': 'publie',
   sort: '-date_publication',
-  limit: '3',
-  fields: 'id,title,slug,excerpt,date_publication,author',
+  limit: '4',
+  fields: 'id,title,slug,excerpt,date_publication,author,image_url',
 })
+const articleFeatured = derniersArticles[0] || null
+const articlesSecondaires = derniersArticles.slice(1)
 
 // Stats programme
 const engagements = await fetchItems('engagements', { limit: '200', fields: 'id,statut' })
@@ -100,6 +106,57 @@ function formatDateLong(iso: string): string {
     </div>
   </section>
 
+  <!-- Blog mis en avant : article principal + grille secondaire -->
+  {articleFeatured && (
+    <section class="mb-12">
+      <div class="mb-4 flex items-baseline justify-between">
+        <h2 class="text-2xl font-bold">Le blog citoyen</h2>
+        <a href="/blog" class="text-sm font-medium text-green-700 hover:underline">Tous les articles →</a>
+      </div>
+      <div class="grid gap-6 lg:grid-cols-3">
+        <a
+          href={`/blog/${articleFeatured.slug}`}
+          class="group block overflow-hidden rounded-xl border border-gray-200 transition-colors hover:border-green-400 lg:col-span-2"
+        >
+          {articleFeatured.image_url && (
+            <img
+              src={articleFeatured.image_url}
+              alt=""
+              class="h-56 w-full object-cover sm:h-72"
+              loading="lazy"
+            />
+          )}
+          <div class="p-5">
+            <div class="text-xs uppercase tracking-wide text-green-700">À la une</div>
+            <h3
+              class="mt-1 text-2xl font-bold text-gray-900 group-hover:text-green-800"
+              set:html={decodeHtml(articleFeatured.title)}
+            />
+            <div class="mt-1 text-xs text-gray-500">
+              {formatDateShort(articleFeatured.date_publication)}
+              {articleFeatured.author && ` · ${articleFeatured.author}`}
+            </div>
+            {articleFeatured.excerpt && (
+              <p class="mt-3 text-sm text-gray-700 line-clamp-4" set:html={decodeHtml(articleFeatured.excerpt)} />
+            )}
+          </div>
+        </a>
+        <div class="flex flex-col gap-4">
+          {articlesSecondaires.map((a: any) => (
+            <a
+              href={`/blog/${a.slug}`}
+              class="group block rounded-lg border border-gray-200 p-4 transition-colors hover:border-green-300 hover:bg-green-50"
+            >
+              <div class="text-xs text-gray-400">{formatDateShort(a.date_publication)}{a.author && ` · ${a.author}`}</div>
+              <h3 class="mt-1 font-semibold group-hover:text-green-800 line-clamp-2" set:html={decodeHtml(a.title)} />
+              {a.excerpt && <p class="mt-2 text-sm text-gray-600 line-clamp-2" set:html={decodeHtml(a.excerpt)} />}
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+  )}
+
   <!-- Dernières délibérations -->
   {deliberations.length > 0 && (
     <section class="mb-12">
@@ -123,25 +180,6 @@ function formatDateLong(iso: string): string {
               <span class="text-gray-400">Abst. {d.vote_abstention}</span>
               {d.budget_montant && <span class="ml-auto font-semibold text-yellow-700">{d.budget_montant.toLocaleString('fr-FR')} €</span>}
             </div>
-          </a>
-        ))}
-      </div>
-    </section>
-  )}
-
-  <!-- Derniers articles du blog -->
-  {derniersArticles.length > 0 && (
-    <section class="mb-12">
-      <div class="mb-4 flex items-baseline justify-between">
-        <h2 class="text-xl font-bold">Derniers articles du blog</h2>
-        <a href="/blog" class="text-sm font-medium text-green-700 hover:underline">Tous les articles →</a>
-      </div>
-      <div class="grid gap-4 md:grid-cols-3">
-        {derniersArticles.map((a: any) => (
-          <a href={`/blog/${a.slug}`} class="group block rounded-lg border border-gray-200 p-4 transition-colors hover:border-green-300 hover:bg-green-50">
-            <div class="text-xs text-gray-400">{formatDateShort(a.date_publication)}{a.author && ` · ${a.author}`}</div>
-            <h3 class="mt-1 font-semibold group-hover:text-green-800 line-clamp-2" set:html={decodeHtml(a.title)} />
-            {a.excerpt && <p class="mt-2 text-sm text-gray-600 line-clamp-3" set:html={decodeHtml(a.excerpt)} />}
           </a>
         ))}
       </div>

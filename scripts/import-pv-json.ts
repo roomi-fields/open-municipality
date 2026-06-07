@@ -148,17 +148,21 @@ export async function importPV(pv: ParsedPV, options?: ImportPVOptions): Promise
 
     if (resp?.id) {
       console.log(`  ✓ ${numero} — ${d.titre.substring(0, 60)}...`)
-      // Votes nominatifs
-      const contreSet = new Set((d.vote.detailContre || []).map(n => n.trim()))
-      const abstentionSet = new Set((d.vote.detailAbstention || []).map(n => n.trim()))
-      for (const c of pv.conseillers) {
-        const eluId = await findOrCreateElu(c.nom, c.prenom)
-        if (!eluId) continue
-        let choix = 'pour'
-        if (c.statut === 'absent') choix = 'absent'
-        else if (contreSet.has(`${c.prenom} ${c.nom}`)) choix = 'contre'
-        else if (abstentionSet.has(`${c.prenom} ${c.nom}`)) choix = 'abstention'
-        await createItem('votes_elus', { elu: eluId, deliberation: resp.id, choix })
+      // Votes nominatifs — uniquement si la source est un PV officiel.
+      // Pour une transcription audio, on ne peut pas observer qui a levé la main,
+      // donc on ne fabrique pas d'attribution nominative.
+      if (pv.seance?.source !== 'transcription_audio') {
+        const contreSet = new Set((d.vote.detailContre || []).map(n => n.trim()))
+        const abstentionSet = new Set((d.vote.detailAbstention || []).map(n => n.trim()))
+        for (const c of pv.conseillers) {
+          const eluId = await findOrCreateElu(c.nom, c.prenom)
+          if (!eluId) continue
+          let choix = 'pour'
+          if (c.statut === 'absent') choix = 'absent'
+          else if (contreSet.has(`${c.prenom} ${c.nom}`)) choix = 'contre'
+          else if (abstentionSet.has(`${c.prenom} ${c.nom}`)) choix = 'abstention'
+          await createItem('votes_elus', { elu: eluId, deliberation: resp.id, choix })
+        }
       }
     } else {
       console.error(`  ✗ ${numero}`)
