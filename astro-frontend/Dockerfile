@@ -1,5 +1,7 @@
 FROM node:22-alpine AS build
 WORKDIR /app
+ARG PUBLIC_DIRECTUS_URL
+ENV PUBLIC_DIRECTUS_URL=$PUBLIC_DIRECTUS_URL
 COPY package*.json ./
 RUN npm ci
 COPY . .
