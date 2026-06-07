@@ -38,9 +38,11 @@ docker exec open-municipality-postgres-1 psql -U om_user -d open_municipality -f
 echo "  ✓ Dump restauré (log : /tmp/restore.log)"
 
 echo ""
-echo "===== 4. Sync admin credentials .env.prod (= ceux du dump local) ====="
-sed -i 's|^ADMIN_EMAIL=.*|ADMIN_EMAIL=admin@plateforme-citoyenne.fr|' .env.prod
-sed -i 's|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=admin|' .env.prod
+echo "===== 4. Admin credentials .env.prod (laissés tels quels) ====="
+# Note historique : on force-resettait ici l'email/password à 'admin@plateforme-citoyenne.fr / admin'
+# parce que le dump local contenait ces credentials. Désactivé : on garde le mot de passe
+# robuste défini en prod et dans le dump (à condition que local et prod aient été synchronisés).
+echo "  (skip — gérer le mot de passe via l'UI Directus + sync entre local et prod)"
 
 echo ""
 echo "===== 5. Rebuild + restart (force recreate, --build pour le nouveau code) ====="
