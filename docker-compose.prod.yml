@@ -98,8 +98,7 @@ services:
       - directus
     environment:
       DIRECTUS_URL: http://directus:8055
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DIRECTUS_TOKEN: ${DIRECTUS_SERVICE_TOKEN}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     volumes:
       - scraper_data:/app/data
@@ -119,8 +118,7 @@ services:
       - directus
     environment:
       DIRECTUS_URL: http://directus:8055
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DIRECTUS_TOKEN: ${DIRECTUS_SERVICE_TOKEN}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     volumes:
       - scraper_data:/app/data
@@ -143,8 +141,7 @@ services:
       - directus
     environment:
       DIRECTUS_URL: http://directus:8055
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DIRECTUS_TOKEN: ${DIRECTUS_SERVICE_TOKEN}
     volumes:
       - scraper_data:/app/data
     entrypoint: ["/bin/sh", "-c"]
@@ -163,8 +160,7 @@ services:
       - directus
     environment:
       DIRECTUS_URL: http://directus:8055
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DIRECTUS_TOKEN: ${DIRECTUS_SERVICE_TOKEN}
       BREVO_API_KEY: ${BREVO_API_KEY}
       EMAIL_FROM_ADDR: ${EMAIL_FROM_ADDR}
       SITE_URL: ${SITE_URL}

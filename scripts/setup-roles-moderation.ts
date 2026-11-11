@@ -3,7 +3,7 @@
  * `commentaire_votes` pour les pouces 👍👎 + permissions associées.
  * Crée aussi le compte admin Roomi (roomi@liance.art).
  */
-import { login, api, getItems, createItem, updateItem } from './lib/directus'
+import { api, getItems, createItem, updateItem } from './lib/directus'
 
 const PUBLIC_POLICY = 'abf8a154-5b1c-4a46-ac9c-7300570f4f17'
 
@@ -36,7 +36,6 @@ async function ensurePerm(collection: string, action: string, payload: any) {
 }
 
 async function main() {
-  await login()
 
   console.log('🔧 Ajout du champ role aux citoyens...')
   const created = await ensureField('citoyens', {

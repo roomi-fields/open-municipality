@@ -4,7 +4,7 @@
  */
 
 import fs from 'fs'
-import { login, api, getItems, createItem, upsert } from './lib/directus'
+import { api, getItems, createItem, upsert } from './lib/directus'
 import type { ParsedPV } from './parse-pv'
 
 const THEME_RULES: Record<string, string[]> = {
@@ -176,7 +176,6 @@ export async function importPV(pv: ParsedPV, options?: ImportPVOptions): Promise
 async function main() {
   const jsonPath = process.argv[2]
   if (!jsonPath) { console.error('Usage: npx tsx import-pv-json.ts <json-file>'); process.exit(1) }
-  await login()
   const pv = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'))
   await importPV(pv)
 }

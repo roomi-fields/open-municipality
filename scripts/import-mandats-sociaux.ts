@@ -4,7 +4,7 @@
  * Usage : npx tsx import-mandats-sociaux.ts
  */
 
-import { login, getItems, updateItem } from './lib/directus'
+import { getItems, updateItem } from './lib/directus'
 
 const API_URL = 'https://recherche-entreprises.api.gouv.fr/search'
 const DEPARTEMENT = '32'
@@ -76,7 +76,6 @@ async function main() {
   console.log('🏢 Import mandats sociaux des élus\n')
   console.log('   Source : recherche-entreprises.api.gouv.fr (RCS, RNA, INSEE)\n')
 
-  await login()
 
   const allElus = await getItems('elus', 'limit=500')
 

@@ -15,7 +15,7 @@
 
 import fs from 'fs'
 import path from 'path'
-import { login, getItems, createItem, updateItem } from './lib/directus'
+import { getItems, createItem, updateItem } from './lib/directus'
 
 // Charger .env
 const envPath = path.resolve('../.env')
@@ -211,7 +211,6 @@ async function processSource(src: typeof SOURCES[0], state: State) {
 
 async function main() {
   console.log(`🔄 Scraper séances — ${new Date().toISOString()}\n`)
-  await login()
   const state = loadState()
   for (const src of SOURCES) await processSource(src, state)
   state.lastCheck = new Date().toISOString()

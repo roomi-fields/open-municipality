@@ -2,7 +2,7 @@
  * Import des prochaines séances CM LIJ + CC CCGT avec ordres du jour.
  * Source : sites officiels (avril 2026).
  */
-import { login, getItems, createItem, updateItem } from './lib/directus'
+import { getItems, createItem, updateItem } from './lib/directus'
 
 const COLL_LIJ = 1
 const COLL_CCGT = 2
@@ -53,7 +53,6 @@ const SEANCES = [
 
 async function main() {
   console.log('🗓  Import des prochaines séances\n')
-  await login()
 
   for (const s of SEANCES) {
     const existing = await getItems('seances', `filter[date][_eq]=${s.date}&filter[collectivite][_eq]=${s.collectivite}&limit=1`)

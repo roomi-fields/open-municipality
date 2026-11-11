@@ -1,10 +1,9 @@
 /**
  * Crée la collection `articles` (blog) dans Directus.
  */
-import { login, api } from './lib/directus'
+import { api } from './lib/directus'
 
 async function main() {
-  await login()
 
   // Vérifier si la collection existe déjà
   try {

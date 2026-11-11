@@ -6,7 +6,7 @@
  * Source : /mnt/d/Claude/municipales/adversaires/02-BIZARD-Eric-Demain-Ensemble.md
  */
 
-import { login, api, getItems, createItem, updateItem } from './lib/directus'
+import { api, getItems, createItem, updateItem } from './lib/directus'
 
 const COLLECTIVITE_LIJ = 1 // L'Isle-Jourdain
 
@@ -100,7 +100,6 @@ function normalizeNom(s: string): string {
 
 async function main() {
   console.log('🏛  Mise à jour conseil municipal L\'Isle-Jourdain — Mandat 2026\n')
-  await login()
 
   // 1. Charger les élus existants
   const existingElus = await getItems('elus', 'limit=500')

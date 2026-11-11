@@ -3,7 +3,7 @@
  * Usage : BREVO_API_KEY=xkeysib-... npx tsx notify-seances.ts
  */
 
-import { login, getItems, createItem } from './lib/directus'
+import { api, getItems, createItem } from './lib/directus'
 import { sendEmail } from './email'
 
 const SITE_URL = process.env.SITE_URL || 'http://localhost:3333'
@@ -45,7 +45,6 @@ async function main() {
   }
 
   console.log('📧 Notification des séances à venir\n')
-  await login()
 
   const seances = await getItems('seances', 'filter[statut][_eq]=a_venir&limit=20')
   if (!seances.length) { console.log('Aucune séance à venir'); return }
@@ -68,7 +67,8 @@ async function main() {
     if (existingNotif.length > 0) { console.log('   ⏭ Déjà notifié'); continue }
 
     // Directus users with newsletter=true
-    const users = await getItems('directus_users' as any, 'filter[newsletter][_eq]=true&limit=500')
+    // Les comptes Directus ne sont pas servis par /items : passer par /users
+    const users = (await api('GET', '/users?filter[newsletter][_eq]=true&fields=id,email&limit=500')).data || []
     const subscribers = users.filter((u: any) => u.email && !u.email.includes('@citoyen.local'))
 
     if (!subscribers.length) { console.log('   ⚠️ Aucun abonné'); continue }

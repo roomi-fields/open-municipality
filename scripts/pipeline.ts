@@ -7,7 +7,6 @@ import fs from 'fs'
 import path from 'path'
 import { loadState, saveState, type FileState, type ScraperState } from './scraper'
 import { downloadPdf, parsePvWithClaude } from './parse-pv'
-import { login } from './lib/directus'
 import { importPV } from './import-pv-json'
 
 const MAX_PER_CYCLE = parseInt(process.env.PIPELINE_MAX || '3')
@@ -71,7 +70,6 @@ async function main() {
   }
 
   console.log('🔄 Pipeline Open Municipality (Directus)\n')
-  await login()
 
   const state = loadState()
   const toProcess: [string, FileState][] = []

@@ -2,13 +2,12 @@
  * Migration des articles WordPress → Directus collection `articles`.
  * Source : https://plateformecitoyennelisloise.fr (ancien site WP)
  */
-import { login, getItems, createItem, updateItem } from './lib/directus'
+import { getItems, createItem, updateItem } from './lib/directus'
 
 const WP_API = 'https://plateformecitoyennelisloise.fr/?rest_route=/wp/v2/posts&per_page=50'
 
 async function main() {
   console.log('📥 Migration articles WordPress → Directus\n')
-  await login()
 
   console.log(`Fetch ${WP_API}`)
   const resp = await fetch(WP_API)

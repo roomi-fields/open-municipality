@@ -12,7 +12,6 @@ if (fs.existsSync(envPath)) {
     if (m) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
   }
 }
-import { login } from './lib/directus'
 import { importPV } from './import-pv-json'
 
 async function main() {
@@ -23,7 +22,6 @@ async function main() {
   const pdfBuffer = fs.readFileSync(pdfPath)
   console.log(`📄 ${pdfPath} (${(pdfBuffer.length / 1024).toFixed(0)} KB)\n`)
 
-  await login()
   const parsed = await parsePvWithClaude(pdfBuffer)
   parsed.seance.type = 'conseil_communautaire'
 

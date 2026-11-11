@@ -5,7 +5,7 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { login, api, getItems, createItem, updateItem } from './lib/directus'
+import { api, getItems, createItem, updateItem } from './lib/directus'
 
 const RNE_URLS = {
   cm: 'https://www.data.gouv.fr/fr/datasets/r/d5f400de-ae3f-4966-8cb6-a85c70c6c24a',
@@ -67,7 +67,6 @@ async function main() {
   const doDownload = args.includes('--download')
 
   console.log('🗃️  Import RNE — Directus\n')
-  await login()
 
   if (doDownload) {
     console.log('📥 Téléchargement des CSV RNE...\n')
@@ -147,16 +146,6 @@ async function main() {
 
   // 4. Écriture en base (batch)
   console.log(`\n📝 Écriture de ${elusMap.size} élus en batch...`)
-
-  // Re-login car le parsing CSV a pris du temps
-  console.log('   Re-login...')
-  try {
-    await login()
-    console.log('   ✓ Login OK')
-  } catch (e: any) {
-    console.error('   ✗ Login failed:', e.message, e.cause ? `cause: ${JSON.stringify(e.cause)}` : '')
-    process.exit(1)
-  }
 
   // Charger tous les élus existants d'un coup
   const existingElus = await getItems('elus', 'limit=500')

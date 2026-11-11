@@ -73,11 +73,18 @@ crontab -e
 `.env` à la racine `v2/` :
 ```
 DIRECTUS_URL=http://localhost:8055
-DIRECTUS_EMAIL=admin@example.com
-DIRECTUS_PASSWORD=...
+DIRECTUS_TOKEN=...                  # jeton statique Directus (voir ci-dessous)
 ANTHROPIC_API_KEY=sk-ant-...        # parsing PV/OJ
 BREVO_API_KEY=xkeysib-...           # notifications email
 ```
+
+Les tâches automatiques (scraper-seances, scraper-pv, rne-updater, notifier) utilisent en
+production le jeton du compte Directus « Services scripts » (`DIRECTUS_SERVICE_TOKEN` dans
+`.env.prod`) : pas d'accès admin, lecture/écriture limitée à collectivites, themes, seances,
+elus, presences, deliberations, votes_elus, notifications et à l'email des abonnés. Toute
+nouvelle collection touchée par ces tâches doit être ajoutée à la politique « Services scripts ».
+Les scripts de mise en place (setup-*, import ponctuels) se lancent avec le jeton d'un
+administrateur humain.
 
 ## Schéma Directus utilisé
 

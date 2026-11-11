@@ -6,7 +6,7 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { login, getItems, updateItem } from './lib/directus'
+import { getItems, updateItem } from './lib/directus'
 
 const HATVP_URL = 'https://www.data.gouv.fr/api/1/datasets/r/8583f5c6-5665-473b-9d3e-1d54bbc88a4a'
 const DATA_DIR = path.resolve('../data')
@@ -49,7 +49,6 @@ async function main() {
     process.exit(1)
   }
 
-  await login()
 
   // Charger nos élus
   const elus = await getItems('elus', 'limit=500')

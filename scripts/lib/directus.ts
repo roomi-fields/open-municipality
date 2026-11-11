@@ -3,24 +3,13 @@
  */
 
 export const DIRECTUS_URL = process.env.DIRECTUS_URL || 'http://localhost:8055'
-let TOKEN = ''
+// Jeton statique Directus : compte de service à droits limités pour les tâches
+// automatiques, jeton d'un humain administrateur pour les scripts de mise en place.
+const TOKEN = process.env.DIRECTUS_TOKEN || ''
+if (!TOKEN) throw new Error('DIRECTUS_TOKEN manquant')
 
 // Force new connection on each request (avoid Node.js undici socket reuse issues)
 const fetchOpts = { keepalive: false }
-
-export async function login() {
-  const email = process.env.ADMIN_EMAIL || 'admin@plateforme-citoyenne.fr'
-  const password = process.env.ADMIN_PASSWORD || 'admin'
-  const resp = await fetch(`${DIRECTUS_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
-    body: JSON.stringify({ email, password }),
-    ...fetchOpts,
-  })
-  const data = await resp.json()
-  if (!data.data?.access_token) throw new Error('Login failed: ' + JSON.stringify(data))
-  TOKEN = data.data.access_token
-}
 
 export async function api(method: string, endpoint: string, body?: any): Promise<any> {
   const opts: RequestInit = {
@@ -30,7 +19,9 @@ export async function api(method: string, endpoint: string, body?: any): Promise
   }
   if (body) opts.body = JSON.stringify(body)
   const resp = await fetch(`${DIRECTUS_URL}${endpoint}`, opts)
-  return resp.json()
+  // Une requête refusée doit échouer : renvoyer une liste vide ferait créer des doublons
+  if (!resp.ok) throw new Error(`Directus ${method} ${endpoint} → ${resp.status} ${await resp.text()}`)
+  return resp.status === 204 ? {} : resp.json()
 }
 
 export async function getItems(collection: string, filter?: string): Promise<any[]> {

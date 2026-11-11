@@ -3,7 +3,7 @@
  * Source : PV d'élection du 07/04/2026 (ccgascognetoulousaine.com)
  */
 
-import { login, getItems, createItem, updateItem } from './lib/directus'
+import { getItems, createItem, updateItem } from './lib/directus'
 
 const CCGT_ID = 2
 const DATE_MANDAT = '2026-04-07'
@@ -99,7 +99,6 @@ async function ensureCommune(nom: string): Promise<number> {
 
 async function main() {
   console.log("🏛  Mise à jour conseil communautaire CCGT — Mandat 2026\n")
-  await login()
 
   // 1. Créer les communes manquantes
   for (const nomCommune of Object.keys(COMMUNES)) {

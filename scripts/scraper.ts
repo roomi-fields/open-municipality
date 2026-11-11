@@ -12,7 +12,7 @@
 import fs from 'fs'
 import path from 'path'
 
-import { login, getItems, createItem } from './lib/directus'
+import { getItems, createItem } from './lib/directus'
 
 const DATA_DIR = path.resolve('../data')
 const STATE_FILE = path.resolve(DATA_DIR, 'scraper-state.json')
@@ -260,7 +260,6 @@ async function main() {
   console.log('🔍 Scraper Open Municipality')
   console.log(`   Date : ${new Date().toISOString()}`)
 
-  await login()
   fs.mkdirSync(DATA_DIR, { recursive: true })
   const state = loadState()
 

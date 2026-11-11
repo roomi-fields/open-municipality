@@ -1,7 +1,7 @@
 /**
  * Crée les collections `citoyens` et `magic_tokens` pour l'auth magic-link.
  */
-import { login, api } from './lib/directus'
+import { api } from './lib/directus'
 
 const PUBLIC_POLICY = 'abf8a154-5b1c-4a46-ac9c-7300570f4f17'
 
@@ -27,7 +27,6 @@ async function createCollection(name: string, fields: any[], opts: any = {}) {
 }
 
 async function main() {
-  await login()
 
   await createCollection('citoyens', [
     { field: 'email', type: 'string', schema: { is_unique: true, is_nullable: false }, meta: { interface: 'input', required: true, width: 'full' } },

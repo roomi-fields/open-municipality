@@ -6,7 +6,7 @@
  * Idempotent : retrouve les délibérations déjà créées via le numero pour
  * chaque (seance, oj.numero) et les met à jour plutôt que d'en créer en double.
  */
-import { login, api, getItems, createItem, updateItem } from './lib/directus'
+import { api, getItems, createItem, updateItem } from './lib/directus'
 
 async function ensureStatutChoice() {
   // Ajouter "a_venir" aux choix possibles de deliberations.statut
@@ -33,7 +33,6 @@ async function ensureStatutChoice() {
 interface OJItem { section: string; numero: number; titre: string }
 
 async function main() {
-  await login()
   await ensureStatutChoice()
 
   const seances = await getItems('seances',

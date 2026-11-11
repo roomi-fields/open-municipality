@@ -1,7 +1,7 @@
 /**
  * Déduction du sexe à partir du prénom pour les élus sans sexe renseigné.
  */
-import { login, getItems, updateItem } from './lib/directus'
+import { getItems, updateItem } from './lib/directus'
 
 // Règles heuristiques français (suffixes et cas particuliers)
 const MASCULIN_EXACTS = new Set([
@@ -33,7 +33,6 @@ function deduce(prenom: string): 'M' | 'F' | null {
 
 async function main() {
   console.log('👤 Déduction du sexe à partir du prénom\n')
-  await login()
   const elus = await getItems('elus', 'limit=500')
   let updated = 0, skipped = 0, unknown = 0
   for (const e of elus) {
