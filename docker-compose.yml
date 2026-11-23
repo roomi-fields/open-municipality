@@ -17,7 +17,8 @@ services:
       retries: 5
 
   directus:
-    image: directus/directus:11
+    # Version exacte : les mineures 12.x apportent des changements incompatibles
+    image: directus/directus:12.7.0
     restart: unless-stopped
     depends_on:
       postgres:
@@ -41,6 +42,8 @@ services:
       CORS_ENABLED: "true"
       CORS_ORIGIN: "*"
 
+      # Directus 12 ne fait plus confiance au proxy par défaut (IP réelle des visiteurs)
+      IP_TRUST_PROXY: "true"
       USERS_REGISTER_ENABLED: "true"
     volumes:
       - directus_uploads:/directus/uploads

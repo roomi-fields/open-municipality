@@ -17,7 +17,7 @@ Plateforme citoyenne open source de transparence et participation démocratique 
 
 ```
 ┌──────────────────┐     ┌───────────────────────┐
-│   Directus 11     │     │    Astro 6 (SSR)       │
+│   Directus 12     │     │    Astro 7 (SSR)       │
 │   (port 8055)     │────>│    (port 3333)         │
 │  Admin + REST API │     │    + React Islands     │
 │  PostgreSQL 16    │     │    + Tailwind CSS v4   │

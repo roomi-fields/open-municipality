@@ -81,7 +81,9 @@ BREVO_API_KEY=xkeysib-...           # notifications email
 Les tâches automatiques (scraper-seances, scraper-pv, rne-updater, notifier) utilisent en
 production le jeton du compte Directus « Services scripts » (`DIRECTUS_SERVICE_TOKEN` dans
 `.env.prod`) : pas d'accès admin, lecture/écriture limitée à collectivites, themes, seances,
-elus, presences, deliberations, votes_elus, notifications et à l'email des abonnés. Toute
+elus, presences, deliberations, votes_elus, notifications et lecture des comptes Directus
+(abonnés). Directus 12 sans licence (« Core ») refuse les permissions limitées à certains
+champs ou filtrées : chaque permission doit porter sur tous les champs, sans règle. Toute
 nouvelle collection touchée par ces tâches doit être ajoutée à la politique « Services scripts ».
 Les scripts de mise en place (setup-*, import ponctuels) se lancent avec le jeton d'un
 administrateur humain.
